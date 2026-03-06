@@ -65,5 +65,5 @@ export function detectMotion(video: HTMLVideoElement): boolean {
   previousFrameData = new Uint8ClampedArray(imageData.data);
 
   const avgDiff = diffSum / count;
-  return avgDiff > 10;
+  return avgDiff > 5;
 }
