@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { CameraView } from './components/CameraView/CameraView.tsx';
+import { DebugLog, type LogEntry } from './components/CameraView/DebugLog.tsx';
 import { TranscriptPanel } from './components/Transcript/TranscriptPanel.tsx';
 import { ModeToggle } from './components/Controls/ModeToggle.tsx';
 import { MuteButton } from './components/Controls/MuteButton.tsx';
@@ -18,6 +19,16 @@ export function App() {
   const [toast, setToast] = useState<{ message: string; type: 'info' | 'error' | 'success' } | null>(null);
   const [partialText, setPartialText] = useState<string | null>(null);
   const [showLandmarks, setShowLandmarks] = useState(false);
+  const [debugEntries, setDebugEntries] = useState<LogEntry[]>([]);
+  const logIdRef = useRef(0);
+
+  const addLog = useCallback((message: string, type: LogEntry['type'] = 'info') => {
+    setDebugEntries((prev) => {
+      const entry: LogEntry = { id: ++logIdRef.current, timestamp: new Date(), message, type };
+      const next = [...prev, entry];
+      return next.length > 80 ? next.slice(-60) : next;
+    });
+  }, []);
 
   const { settings } = useSettings();
   const {
@@ -95,7 +106,14 @@ export function App() {
             setIsProcessing(true);
           }
           break;
+        case 'debug':
+          if (msg.message) {
+            const isModel = msg.message.startsWith('Gemini response:');
+            addLog(msg.message, isModel ? 'model' : 'info');
+          }
+          break;
         case 'error':
+          addLog(msg.error || 'Error', 'error');
           setToast({ message: msg.error || 'An error occurred', type: 'error' });
           setIsProcessing(false);
           break;
@@ -132,13 +150,18 @@ export function App() {
     [currentMode, sendEndTurn, setCurrentMode, startMic, stopMic]
   );
 
+  const frameCountRef = useRef(0);
   const handleFrame = useCallback(
     (frameData: string) => {
       if (currentMode === 'signing') {
+        frameCountRef.current++;
+        if (frameCountRef.current % 5 === 1) {
+          addLog(`Frame sent (${Math.round(frameData.length * 0.75 / 1024)}KB)`, 'frame');
+        }
         sendVideoFrame(frameData);
       }
     },
-    [currentMode, sendVideoFrame]
+    [currentMode, sendVideoFrame, addLog]
   );
 
   // Landing page
@@ -203,6 +226,7 @@ export function App() {
               isProcessing={isProcessing && currentMode === 'signing'}
               showLandmarks={showLandmarks}
             />
+            <DebugLog entries={debugEntries} />
           </section>
         )}
 

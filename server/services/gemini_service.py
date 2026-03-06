@@ -73,7 +73,7 @@ class GeminiService:
         prompt = base_prompt
         if conversation_history:
             history_text = "\n".join(
-                [f"- {m['speaker']}: {m['text']}" for m in conversation_history[-8:]]
+                [f"- {m['speaker']}: {m['text']}" for m in conversation_history[-20:]]
             )
             prompt += CONTEXTUAL_SUFFIX.format(history=history_text)
         return prompt
@@ -116,7 +116,7 @@ class GeminiService:
         prompt = self._build_prompt(MULTI_FRAME_PROMPT, conversation_history)
 
         parts = []
-        for i, frame in enumerate(frames[-5:]):
+        for i, frame in enumerate(frames[-12:]):
             parts.append(
                 types.Part(
                     inline_data=types.Blob(
@@ -149,7 +149,7 @@ class GeminiService:
         )
         if conversation_history:
             history_text = "\n".join(
-                [f"- {m['speaker']}: {m['text']}" for m in conversation_history[-5:]]
+                [f"- {m['speaker']}: {m['text']}" for m in conversation_history[-12:]]
             )
             prompt += f"\n\nCONVERSATION SO FAR:\n{history_text}"
 

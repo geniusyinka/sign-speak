@@ -32,13 +32,15 @@ export type WSMessageType =
   | 'partial'
   | 'audio'
   | 'error'
-  | 'status';
+  | 'status'
+  | 'debug';
 
 export interface WSMessage {
   type: WSMessageType;
   data?: string;
   text?: string;
   error?: string;
+  message?: string;
   confidence?: number;
   status?: 'ready' | 'processing' | 'error';
 }

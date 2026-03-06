@@ -54,12 +54,20 @@ async def conversation_websocket(websocket: WebSocket):
                 frame_buffer.clear()
 
             await websocket.send_json({"type": "status", "status": "processing"})
+            await websocket.send_json({
+                "type": "debug",
+                "message": f"Processing {len(frames)} frame(s)...",
+            })
 
             history = session_service.get_history(session_id)
 
             if len(frames) == 1:
                 # Single frame - use streaming for fast response
                 full_text = ""
+                await websocket.send_json({
+                    "type": "debug",
+                    "message": "Single frame → streaming recognition",
+                })
                 async for chunk in gemini_service.recognize_sign(
                     frames[0], history
                 ):
@@ -73,8 +81,17 @@ async def conversation_websocket(websocket: WebSocket):
                 text = full_text.strip()
             else:
                 # Multiple frames - batch for better accuracy
+                await websocket.send_json({
+                    "type": "debug",
+                    "message": f"Batch recognition with {len(frames)} frames (~{len(frames)/5:.1f}s of video)",
+                })
                 text = await gemini_service.recognize_sign_batch(frames, history)
                 text = text.strip()
+
+            await websocket.send_json({
+                "type": "debug",
+                "message": f"Gemini response: \"{text}\"",
+            })
 
             if text and text not in ("[unclear]", "[idle]") and len(text) > 0:
                 session_service.add_message(session_id, "signed", text, "user")
@@ -98,6 +115,10 @@ async def conversation_websocket(websocket: WebSocket):
             await websocket.send_json({"type": "status", "status": "ready"})
         except Exception as e:
             logger.error(f"Sign recognition error: {e}")
+            await websocket.send_json({
+                "type": "debug",
+                "message": f"Error: {str(e)[:150]}",
+            })
             await websocket.send_json({
                 "type": "error",
                 "error": f"Recognition failed: {str(e)[:100]}",
@@ -173,8 +194,8 @@ async def conversation_websocket(websocket: WebSocket):
                 frame_data = base64.b64decode(message["data"])
                 async with frame_lock:
                     frame_buffer.append(frame_data)
-                    # Keep at most 10 recent frames
-                    if len(frame_buffer) > 10:
+                    # Keep at most 15 recent frames (~3s at 5 FPS)
+                    if len(frame_buffer) > 15:
                         frame_buffer.pop(0)
 
                 # Reset debounce timer

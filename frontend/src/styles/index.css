@@ -374,6 +374,79 @@ body {
   z-index: 1;
 }
 
+/* Debug Log */
+.debug-log {
+  margin-top: var(--space-sm);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: var(--radius-lg);
+  background: #1a1a1a;
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 0.75rem;
+  overflow: hidden;
+}
+
+.debug-log__header {
+  padding: var(--space-xs) var(--space-sm);
+  background: rgba(255,255,255,0.06);
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+  color: #a0a0a0;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.debug-log__entries {
+  max-height: 180px;
+  overflow-y: auto;
+  padding: var(--space-xs) 0;
+  scrollbar-width: thin;
+}
+
+.debug-log__empty {
+  padding: var(--space-md);
+  color: #888;
+  text-align: center;
+  font-style: italic;
+}
+
+.debug-log__entry {
+  display: flex;
+  gap: var(--space-sm);
+  padding: 2px var(--space-sm);
+  line-height: 1.5;
+  border-left: 2px solid transparent;
+}
+
+.debug-log__entry--info {
+  color: #d4d4d4;
+  border-left-color: var(--primary);
+}
+
+.debug-log__entry--model {
+  color: #c4b5fd;
+  border-left-color: #c4b5fd;
+}
+
+.debug-log__entry--error {
+  color: #fca5a5;
+  border-left-color: #ef4444;
+}
+
+.debug-log__entry--frame {
+  color: #737373;
+  border-left-color: transparent;
+}
+
+.debug-log__time {
+  color: #666;
+  flex-shrink: 0;
+}
+
+.debug-log__msg {
+  word-break: break-word;
+}
+
 /* Camera Overlay */
 .camera-overlay {
   position: absolute;
