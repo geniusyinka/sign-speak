@@ -11,6 +11,7 @@ export class WebSocketService {
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private url: string;
+  private shouldReconnect = true;
 
   constructor(url?: string) {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -18,6 +19,7 @@ export class WebSocketService {
   }
 
   connect(): void {
+    this.shouldReconnect = true;
     this.notifyStatus('connecting');
 
     try {
@@ -39,7 +41,10 @@ export class WebSocketService {
 
       this.ws.onclose = () => {
         this.notifyStatus('disconnected');
-        this.attemptReconnect();
+        this.ws = null;
+        if (this.shouldReconnect) {
+          this.attemptReconnect();
+        }
       };
 
       this.ws.onerror = () => {
@@ -52,6 +57,7 @@ export class WebSocketService {
   }
 
   disconnect(): void {
+    this.shouldReconnect = false;
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
@@ -103,7 +109,7 @@ export class WebSocketService {
   }
 
   private attemptReconnect(): void {
-    if (this.reconnectAttempts >= this.maxReconnectAttempts) return;
+    if (!this.shouldReconnect || this.reconnectAttempts >= this.maxReconnectAttempts) return;
 
     this.reconnectAttempts++;
     const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 10000);

@@ -1,4 +1,5 @@
 import logging
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -6,9 +7,29 @@ logger = logging.getLogger(__name__)
 class TTSService:
     def __init__(self):
         self._client = None
+        self._available: Optional[bool] = None
+
+    def is_available(self) -> bool:
+        """Return whether server-side TTS credentials are available."""
+        if self._available is not None:
+            return self._available
+
+        try:
+            import google.auth
+
+            google.auth.default()
+            self._available = True
+        except Exception as e:
+            logger.warning(f"Server-side TTS unavailable: {e}")
+            self._available = False
+
+        return self._available
 
     @property
     def client(self):
+        if not self.is_available():
+            raise RuntimeError("Server-side TTS is not configured")
+
         if self._client is None:
             from google.cloud import texttospeech
             self._client = texttospeech.TextToSpeechAsyncClient()
@@ -16,8 +37,11 @@ class TTSService:
 
     async def synthesize(
         self, text: str, voice_id: str = "en-US-Neural2-F"
-    ) -> bytes:
+    ) -> Optional[bytes]:
         """Convert text to speech audio bytes (MP3)."""
+        if not self.is_available():
+            return None
+
         from google.cloud import texttospeech
 
         voices = {
@@ -51,6 +75,7 @@ class TTSService:
             return response.audio_content
         except Exception as e:
             logger.error(f"TTS synthesis failed: {e}")
+            self._available = False
             raise
 
     def get_available_voices(self) -> list:

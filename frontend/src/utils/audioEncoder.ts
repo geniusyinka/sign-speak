@@ -1,6 +1,30 @@
-export function encodeAudioChunk(audioData: Float32Array, _sampleRate: number): string {
-  const pcm16 = float32ToPCM16(audioData);
+const TARGET_SAMPLE_RATE = 16000;
+
+export function encodeAudioChunk(audioData: Float32Array, sampleRate: number): string {
+  const normalized =
+    sampleRate === TARGET_SAMPLE_RATE ? audioData : resampleTo16k(audioData, sampleRate);
+  const pcm16 = float32ToPCM16(normalized);
   return arrayBufferToBase64(pcm16.buffer as ArrayBuffer);
+}
+
+function resampleTo16k(audioData: Float32Array, sampleRate: number): Float32Array {
+  if (audioData.length === 0) {
+    return audioData;
+  }
+
+  const ratio = sampleRate / TARGET_SAMPLE_RATE;
+  const outputLength = Math.max(1, Math.round(audioData.length / ratio));
+  const result = new Float32Array(outputLength);
+
+  for (let i = 0; i < outputLength; i++) {
+    const position = i * ratio;
+    const leftIndex = Math.floor(position);
+    const rightIndex = Math.min(leftIndex + 1, audioData.length - 1);
+    const weight = position - leftIndex;
+    result[i] = audioData[leftIndex] * (1 - weight) + audioData[rightIndex] * weight;
+  }
+
+  return result;
 }
 
 function float32ToPCM16(float32: Float32Array): Int16Array {
