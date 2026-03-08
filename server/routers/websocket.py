@@ -102,15 +102,21 @@ async def conversation_websocket(websocket: WebSocket):
                 })
 
                 # Generate TTS audio
-                try:
-                    audio_data = await tts_service.synthesize(text)
-                    audio_b64 = base64.b64encode(audio_data).decode()
-                    await websocket.send_json({
-                        "type": "audio",
-                        "data": audio_b64,
-                    })
-                except Exception as e:
-                    logger.error(f"TTS failed: {e}")
+                if tts_service.is_available():
+                    try:
+                        audio_data = await tts_service.synthesize(text)
+                        if audio_data:
+                            audio_b64 = base64.b64encode(audio_data).decode()
+                            await websocket.send_json({
+                                "type": "audio",
+                                "data": audio_b64,
+                            })
+                    except Exception as e:
+                        logger.error(f"TTS failed: {e}")
+                        await websocket.send_json({
+                            "type": "debug",
+                            "message": "Server TTS unavailable, using browser speech fallback",
+                        })
 
             await websocket.send_json({"type": "status", "status": "ready"})
         except Exception as e:
