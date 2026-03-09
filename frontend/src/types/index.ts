@@ -42,6 +42,7 @@ export interface WSMessage {
   error?: string;
   message?: string;
   confidence?: number;
+  source?: 'signed' | 'spoken';
   status?: 'ready' | 'processing' | 'error';
 }
 

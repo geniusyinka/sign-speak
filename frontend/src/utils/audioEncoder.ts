@@ -56,19 +56,24 @@ export function base64ToArrayBuffer(base64: string): ArrayBuffer {
 
 export async function playAudioData(
   base64Audio: string,
-  audioContext: AudioContext
+  audioContext: AudioContext,
+  onSource?: (source: AudioBufferSourceNode | null) => void
 ): Promise<void> {
   const arrayBuffer = base64ToArrayBuffer(base64Audio);
 
   try {
     const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
     const source = audioContext.createBufferSource();
+    onSource?.(source);
     source.buffer = audioBuffer;
     source.connect(audioContext.destination);
     source.start(0);
 
     return new Promise((resolve) => {
-      source.onended = () => resolve();
+      source.onended = () => {
+        onSource?.(null);
+        resolve();
+      };
     });
   } catch {
     console.warn('Failed to decode audio, trying as raw PCM');
@@ -82,12 +87,16 @@ export async function playAudioData(
     audioBuffer.copyToChannel(floatData, 0);
 
     const source = audioContext.createBufferSource();
+    onSource?.(source);
     source.buffer = audioBuffer;
     source.connect(audioContext.destination);
     source.start(0);
 
     return new Promise((resolve) => {
-      source.onended = () => resolve();
+      source.onended = () => {
+        onSource?.(null);
+        resolve();
+      };
     });
   }
 }
