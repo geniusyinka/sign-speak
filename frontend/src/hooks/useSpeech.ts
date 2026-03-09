@@ -3,6 +3,7 @@ import { playAudioData } from '../utils/audioEncoder.ts';
 
 export function useSpeech() {
   const audioContextRef = useRef<AudioContext | null>(null);
+  const activeSourceRef = useRef<AudioBufferSourceNode | null>(null);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const queueRef = useRef<string[]>([]);
@@ -25,7 +26,9 @@ export function useSpeech() {
       const audioData = queueRef.current.shift()!;
       try {
         const ctx = getAudioContext();
-        await playAudioData(audioData, ctx);
+        await playAudioData(audioData, ctx, (source) => {
+          activeSourceRef.current = source;
+        });
       } catch (err) {
         console.error('Failed to play audio:', err);
       }
@@ -62,11 +65,21 @@ export function useSpeech() {
   );
 
   const toggleMute = useCallback(() => {
-    setIsMuted((m) => !m);
-    if (!isMuted) {
-      window.speechSynthesis?.cancel();
-    }
-  }, [isMuted]);
+    setIsMuted((current) => {
+      const next = !current;
+      if (next) {
+        queueRef.current = [];
+        activeSourceRef.current?.stop();
+        activeSourceRef.current = null;
+        isPlayingRef.current = false;
+        setIsSpeaking(false);
+        audioContextRef.current?.close().catch(() => {});
+        audioContextRef.current = null;
+        window.speechSynthesis?.cancel();
+      }
+      return next;
+    });
+  }, []);
 
   return {
     isSpeaking,
