@@ -61,29 +61,17 @@ async def conversation_websocket(websocket: WebSocket):
 
             history = session_service.get_history(session_id)
 
-            if len(frames) == 1:
-                # Single frame - use streaming for fast response
-                full_text = ""
+            if len(frames) < 4:
                 await websocket.send_json({
                     "type": "debug",
-                    "message": "Single frame → streaming recognition",
+                    "message": f"Insufficient signing context ({len(frames)} frame(s)); record a slightly longer sign before interpreting",
                 })
-                async for chunk in gemini_service.recognize_sign(
-                    frames[0], history
-                ):
-                    full_text += chunk
-                    # Stream partial results to frontend for instant feedback
-                    await websocket.send_json({
-                        "type": "partial",
-                        "text": full_text.strip(),
-                    })
-
-                text = full_text.strip()
+                text = "[idle]"
             else:
-                # Multiple frames - batch for better accuracy
+                # Use the whole buffered clip for sign recognition accuracy
                 await websocket.send_json({
                     "type": "debug",
-                    "message": f"Batch recognition with {len(frames)} frames (~{len(frames)/5:.1f}s of video)",
+                    "message": f"Batch recognition with {len(frames)} frames (~{len(frames)/8:.1f}s of video)",
                 })
                 text = await gemini_service.recognize_sign_batch(frames, history)
                 text = text.strip()
@@ -178,15 +166,8 @@ async def conversation_websocket(websocket: WebSocket):
         finally:
             audio_processing = False
 
-    # Debounce timer for frame processing
-    debounce_task: Optional[asyncio.Task] = None
     # Debounce timer for audio processing
     audio_debounce_task: Optional[asyncio.Task] = None
-
-    async def debounce_process():
-        """Wait briefly after last frame, then process."""
-        await asyncio.sleep(0.3)
-        await process_sign_frames()
 
     async def debounce_audio():
         """Wait briefly after last audio chunk, then transcribe."""
@@ -202,14 +183,9 @@ async def conversation_websocket(websocket: WebSocket):
                 frame_data = base64.b64decode(message["data"])
                 async with frame_lock:
                     frame_buffer.append(frame_data)
-                    # Keep at most 15 recent frames (~3s at 5 FPS)
-                    if len(frame_buffer) > 15:
+                    # Keep at most 24 recent frames (~3s at 8 FPS)
+                    if len(frame_buffer) > 24:
                         frame_buffer.pop(0)
-
-                # Reset debounce timer
-                if debounce_task and not debounce_task.done():
-                    debounce_task.cancel()
-                debounce_task = asyncio.create_task(debounce_process())
 
             elif msg_type == "audio_chunk":
                 audio_data = base64.b64decode(message["data"])
@@ -223,8 +199,6 @@ async def conversation_websocket(websocket: WebSocket):
 
             elif msg_type == "end_turn":
                 # Force process any buffered frames/audio immediately
-                if debounce_task and not debounce_task.done():
-                    debounce_task.cancel()
                 if audio_debounce_task and not audio_debounce_task.done():
                     audio_debounce_task.cancel()
                 await process_sign_frames()
@@ -239,8 +213,6 @@ async def conversation_websocket(websocket: WebSocket):
         except Exception:
             pass
     finally:
-        if debounce_task and not debounce_task.done():
-            debounce_task.cancel()
         if audio_debounce_task and not audio_debounce_task.done():
             audio_debounce_task.cancel()
         session_service.remove_session(session_id)

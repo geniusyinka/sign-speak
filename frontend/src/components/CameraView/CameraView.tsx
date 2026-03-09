@@ -19,7 +19,7 @@ export function CameraView({ onFrame, isActive, isProcessing, showLandmarks }: C
 
   useEffect(() => {
     if (isActive) {
-      startCapture().then(() => startFrameCapture(5));
+      startCapture().then(() => startFrameCapture(8));
     } else {
       stopCapture();
     }
