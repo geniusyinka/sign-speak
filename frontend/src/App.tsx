@@ -69,17 +69,18 @@ export function App() {
           if (msg.text) {
             setPartialText(null);
             setIsProcessing(false);
+            const source = msg.source ?? 'spoken';
             addMessage({
-              type: currentMode === 'signing' ? 'signed' : 'spoken',
+              type: source,
               text: msg.text,
-              speaker: currentMode === 'signing' ? 'user' : 'other',
+              speaker: source === 'signed' ? 'user' : 'other',
               confidence: msg.confidence,
             });
 
             // In signing mode, speak the translation aloud for the hearing person.
             // Set a fallback timer: if no server audio arrives within 300ms, use browser TTS.
             // In listening mode, text is displayed for the deaf user — no TTS needed.
-            if (currentMode === 'signing') {
+            if (source === 'signed') {
               if (pendingTTSRef.current) {
                 clearTimeout(pendingTTSRef.current.timer);
               }
@@ -104,6 +105,8 @@ export function App() {
         case 'status':
           if (msg.status === 'processing') {
             setIsProcessing(true);
+          } else if (msg.status === 'ready') {
+            setIsProcessing(false);
           }
           break;
         case 'debug':
@@ -120,7 +123,7 @@ export function App() {
       }
     });
     return unsub;
-  }, [onMessage, addMessage, speak, speakText, setIsProcessing, currentMode]);
+  }, [onMessage, addMessage, speak, speakText, setIsProcessing]);
 
   const handleStart = useCallback(() => {
     connect();

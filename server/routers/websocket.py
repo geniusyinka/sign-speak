@@ -99,6 +99,7 @@ async def conversation_websocket(websocket: WebSocket):
                 await websocket.send_json({
                     "type": "translation",
                     "text": text,
+                    "source": "signed",
                 })
 
                 # Generate TTS audio
@@ -164,6 +165,7 @@ async def conversation_websocket(websocket: WebSocket):
                 await websocket.send_json({
                     "type": "translation",
                     "text": text,
+                    "source": "spoken",
                 })
 
             await websocket.send_json({"type": "status", "status": "ready"})
