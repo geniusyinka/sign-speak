@@ -1,6 +1,6 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
 import { CameraService } from '../services/CameraService.ts';
-import { captureFrame, calculateBrightness, detectMotion } from '../utils/frameEncoder.ts';
+import { captureFrame, calculateBrightness, detectMotion, resetMotionDetection } from '../utils/frameEncoder.ts';
 import type { CameraStatus } from '../types/index.ts';
 
 export function useCamera(onFrame?: (frameData: string) => void) {
@@ -18,6 +18,7 @@ export function useCamera(onFrame?: (frameData: string) => void) {
     if (!videoRef.current) return;
 
     try {
+      resetMotionDetection();
       await cameraService.current.startCapture(videoRef.current);
       setStatus((s) => ({ ...s, isActive: true, hasPermission: true }));
     } catch (err) {
@@ -62,6 +63,7 @@ export function useCamera(onFrame?: (frameData: string) => void) {
   const stopCapture = useCallback(() => {
     stopFrameCapture();
     cameraService.current.stopCapture();
+    resetMotionDetection();
     setStatus((s) => ({ ...s, isActive: false }));
   }, [stopFrameCapture]);
 

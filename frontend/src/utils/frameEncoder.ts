@@ -42,6 +42,10 @@ export function calculateBrightness(video: HTMLVideoElement): number {
 
 let previousFrameData: Uint8ClampedArray | null = null;
 
+export function resetMotionDetection(): void {
+  previousFrameData = null;
+}
+
 export function detectMotion(video: HTMLVideoElement): boolean {
   const { canvas: c, ctx: context } = getCanvas();
   context.drawImage(video, 0, 0, c.width, c.height);
