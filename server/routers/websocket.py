@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import logging
+import time
 from typing import Optional
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from services.gemini_service import GeminiService
@@ -52,6 +53,7 @@ async def conversation_websocket(websocket: WebSocket):
                     return
                 frames = list(frame_buffer)
                 frame_buffer.clear()
+            started_at = time.perf_counter()
 
             await websocket.send_json({"type": "status", "status": "processing"})
             await websocket.send_json({
@@ -79,6 +81,10 @@ async def conversation_websocket(websocket: WebSocket):
             await websocket.send_json({
                 "type": "debug",
                 "message": f"Gemini response: \"{text}\"",
+            })
+            await websocket.send_json({
+                "type": "debug",
+                "message": f"Sign recognition latency: {(time.perf_counter() - started_at):.2f}s",
             })
 
             if text and text not in ("[unclear]", "[idle]") and len(text) > 0:
@@ -186,6 +192,12 @@ async def conversation_websocket(websocket: WebSocket):
                     # Keep at most 24 recent frames (~3s at 8 FPS)
                     if len(frame_buffer) > 24:
                         frame_buffer.pop(0)
+                    buffered_frames = len(frame_buffer)
+                if buffered_frames in (1, 4, 8, 12, 16, 24):
+                    await websocket.send_json({
+                        "type": "debug",
+                        "message": f"Buffered sign frames: {buffered_frames}",
+                    })
 
             elif msg_type == "audio_chunk":
                 audio_data = base64.b64decode(message["data"])
@@ -201,6 +213,10 @@ async def conversation_websocket(websocket: WebSocket):
                 # Force process any buffered frames/audio immediately
                 if audio_debounce_task and not audio_debounce_task.done():
                     audio_debounce_task.cancel()
+                await websocket.send_json({
+                    "type": "debug",
+                    "message": "End turn received; flushing sign/audio buffers",
+                })
                 await process_sign_frames()
                 await process_audio_chunks()
 

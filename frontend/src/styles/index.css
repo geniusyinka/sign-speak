@@ -761,6 +761,13 @@ body {
   letter-spacing: -0.01em;
 }
 
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+  box-shadow: none;
+  transform: none;
+}
+
 .btn--primary {
   background: var(--bg-dark);
   color: var(--text-on-dark);
@@ -770,6 +777,11 @@ body {
   transform: translateY(-1px);
   box-shadow: var(--shadow-lg);
   background: #292524;
+}
+.btn--primary:disabled:hover {
+  transform: none;
+  box-shadow: none;
+  background: var(--bg-dark);
 }
 .btn--primary:active {
   transform: translateY(0);
@@ -784,6 +796,9 @@ body {
 .btn--secondary:hover {
   background: var(--border);
 }
+.btn--secondary:disabled:hover {
+  background: var(--bg-tertiary);
+}
 
 .btn--ghost {
   background: transparent;
@@ -792,6 +807,10 @@ body {
 .btn--ghost:hover {
   background: var(--bg-tertiary);
   color: var(--text-primary);
+}
+.btn--ghost:disabled:hover {
+  background: transparent;
+  color: var(--text-secondary);
 }
 
 .btn--sm { padding: var(--space-xs) var(--space-md); font-size: 0.85rem; min-height: 36px; }
@@ -818,6 +837,24 @@ body {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
+}
+
+.sign-buffer-status {
+  min-width: 110px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.sign-buffer-status--processing {
+  color: var(--status-processing);
+  animation: pulse-text 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse-text {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 
 /* ===== Settings Panel ===== */
