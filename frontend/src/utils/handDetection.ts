@@ -38,6 +38,50 @@ export async function initHandDetection(): Promise<void> {
   await getHandLandmarker();
 }
 
+export interface HandFrameSummary {
+  handCount: number;
+  framing: 'good' | 'hands_not_visible' | 'too_close' | 'too_far';
+}
+
+export async function detectHands(video: HTMLVideoElement): Promise<HandFrameSummary> {
+  const detector = await getHandLandmarker();
+  if (video.readyState < 2) {
+    return { handCount: 0, framing: 'hands_not_visible' };
+  }
+
+  const result = detector.detectForVideo(video, performance.now());
+  const landmarks = result.landmarks ?? [];
+  if (landmarks.length === 0) {
+    return { handCount: 0, framing: 'hands_not_visible' };
+  }
+
+  let largestArea = 0;
+  for (const hand of landmarks) {
+    let minX = 1;
+    let minY = 1;
+    let maxX = 0;
+    let maxY = 0;
+
+    for (const point of hand) {
+      minX = Math.min(minX, point.x);
+      minY = Math.min(minY, point.y);
+      maxX = Math.max(maxX, point.x);
+      maxY = Math.max(maxY, point.y);
+    }
+
+    largestArea = Math.max(largestArea, (maxX - minX) * (maxY - minY));
+  }
+
+  if (largestArea < 0.015) {
+    return { handCount: landmarks.length, framing: 'too_far' };
+  }
+  if (largestArea > 0.35) {
+    return { handCount: landmarks.length, framing: 'too_close' };
+  }
+
+  return { handCount: landmarks.length, framing: 'good' };
+}
+
 export function detectAndDraw(
   video: HTMLVideoElement,
   canvas: HTMLCanvasElement

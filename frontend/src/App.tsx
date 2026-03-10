@@ -14,13 +14,17 @@ import { useConversation } from './context/ConversationContext.tsx';
 import { useSettings } from './context/SettingsContext.tsx';
 
 export function App() {
+  const MIN_SIGN_FRAMES = 8;
+  const AUTO_SUBMIT_PAUSE_MS = 700;
   const [isStarted, setIsStarted] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'info' | 'error' | 'success' } | null>(null);
   const [partialText, setPartialText] = useState<string | null>(null);
+  const [bufferedSignFrames, setBufferedSignFrames] = useState(0);
   const [showLandmarks, setShowLandmarks] = useState(false);
   const [debugEntries, setDebugEntries] = useState<LogEntry[]>([]);
   const logIdRef = useRef(0);
+  const bufferResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const addLog = useCallback((message: string, type: LogEntry['type'] = 'info') => {
     setDebugEntries((prev) => {
@@ -51,6 +55,8 @@ export function App() {
   );
 
   const { startCapture: startMic, stopCapture: stopMic } = useMicrophone(handleAudioChunk);
+  const canInterpretSign =
+    connectionStatus === 'connected' && !isProcessing && bufferedSignFrames >= MIN_SIGN_FRAMES;
 
   // Track pending translation text for browser TTS fallback
   const pendingTTSRef = useRef<{ text: string; timer: ReturnType<typeof setTimeout> } | null>(null);
@@ -69,6 +75,7 @@ export function App() {
           if (msg.text) {
             setPartialText(null);
             setIsProcessing(false);
+            setBufferedSignFrames(0);
             const source = msg.source ?? 'spoken';
             addMessage({
               type: source,
@@ -107,6 +114,7 @@ export function App() {
             setIsProcessing(true);
           } else if (msg.status === 'ready') {
             setIsProcessing(false);
+            setBufferedSignFrames(0);
           }
           break;
         case 'debug':
@@ -135,6 +143,7 @@ export function App() {
     disconnect();
     stopMic();
     setIsStarted(false);
+    setBufferedSignFrames(0);
     setCurrentMode('idle');
   }, [disconnect, stopMic, setCurrentMode]);
 
@@ -143,6 +152,7 @@ export function App() {
       if (mode === currentMode) return;
       sendEndTurn();
       setCurrentMode(mode);
+      setBufferedSignFrames(0);
 
       if (mode === 'listening') {
         startMic();
@@ -153,19 +163,68 @@ export function App() {
     [currentMode, sendEndTurn, setCurrentMode, startMic, stopMic]
   );
 
+  const handleInterpretSign = useCallback(() => {
+    if (bufferedSignFrames < MIN_SIGN_FRAMES) return;
+    addLog(`Submitting sign clip with ${bufferedSignFrames} buffered frame(s)`);
+    setIsProcessing(true);
+    sendEndTurn();
+  }, [bufferedSignFrames, sendEndTurn, setIsProcessing, addLog]);
+
   const frameCountRef = useRef(0);
+  const bufferedSignFramesRef = useRef(0);
+
+  // Keep ref in sync with state so the auto-submit timer closure reads the latest count
+  useEffect(() => {
+    bufferedSignFramesRef.current = bufferedSignFrames;
+  }, [bufferedSignFrames]);
+
   const handleFrame = useCallback(
     (frameData: string) => {
-      if (currentMode === 'signing') {
+      if (currentMode === 'signing' && !isProcessing) {
         frameCountRef.current++;
+        if (bufferResetTimerRef.current) {
+          clearTimeout(bufferResetTimerRef.current);
+        }
+        setBufferedSignFrames((count) => Math.min(count + 1, 24));
+
+        // When motion pauses, auto-submit if we have enough frames
+        bufferResetTimerRef.current = setTimeout(() => {
+          bufferResetTimerRef.current = null;
+          if (bufferedSignFramesRef.current >= MIN_SIGN_FRAMES) {
+            addLog(`Auto-submitting sign clip (${bufferedSignFramesRef.current} frames, pause detected)`);
+            setIsProcessing(true);
+            sendEndTurn();
+          } else {
+            // Not enough frames — just reset
+            setBufferedSignFrames(0);
+          }
+        }, AUTO_SUBMIT_PAUSE_MS);
+
         if (frameCountRef.current % 5 === 1) {
           addLog(`Frame sent (${Math.round(frameData.length * 0.75 / 1024)}KB)`, 'frame');
         }
         sendVideoFrame(frameData);
       }
     },
-    [currentMode, sendVideoFrame, addLog]
+    [currentMode, isProcessing, sendVideoFrame, sendEndTurn, setIsProcessing, addLog]
   );
+
+  useEffect(() => {
+    return () => {
+      if (bufferResetTimerRef.current) {
+        clearTimeout(bufferResetTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (currentMode !== 'signing') return;
+    if (bufferedSignFrames === 0) {
+      addLog('Sign buffer cleared');
+    } else if (bufferedSignFrames === MIN_SIGN_FRAMES) {
+      addLog(`Sign buffer ready (${MIN_SIGN_FRAMES} frames)`);
+    }
+  }, [bufferedSignFrames, currentMode, addLog, MIN_SIGN_FRAMES]);
 
   // Landing page
   if (!isStarted) {
@@ -225,6 +284,7 @@ export function App() {
           <section className="app-main__camera" aria-label="Camera view">
             <CameraView
               onFrame={handleFrame}
+              onDiagnostic={addLog}
               isActive={isStarted}
               isProcessing={isProcessing && currentMode === 'signing'}
               showLandmarks={showLandmarks}
@@ -246,6 +306,31 @@ export function App() {
       <footer className="app-footer">
         <ModeToggle currentMode={currentMode} onModeChange={handleModeChange} />
         <div className="app-footer__actions">
+          {currentMode === 'signing' && (
+            <>
+              {bufferedSignFrames > 0 && !isProcessing && (
+                <span className="sign-buffer-status" aria-live="polite">
+                  {bufferedSignFrames >= MIN_SIGN_FRAMES
+                    ? 'Pause to auto-interpret...'
+                    : `Signing ${bufferedSignFrames}/${MIN_SIGN_FRAMES}`}
+                </span>
+              )}
+              {isProcessing && (
+                <span className="sign-buffer-status sign-buffer-status--processing" aria-live="polite">
+                  Interpreting...
+                </span>
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleInterpretSign}
+                disabled={!canInterpretSign}
+                title="Force interpret now"
+              >
+                Interpret Now
+              </Button>
+            </>
+          )}
           <button
             className={`landmark-toggle ${showLandmarks ? 'landmark-toggle--active' : ''}`}
             onClick={() => setShowLandmarks((v) => !v)}
@@ -286,7 +371,10 @@ export function App() {
 
       {messages.length === 0 && isStarted && !isProcessing && (
         <div className="onboarding-tip" aria-live="polite">
-          <p>Start signing to the camera, or switch to Listen Mode for speech-to-text</p>
+          <p>
+            Sign to the camera — interpretation happens automatically when you pause.
+            Or switch to Listen Mode for speech-to-text.
+          </p>
         </div>
       )}
     </div>

@@ -1,6 +1,6 @@
-const CANVAS_WIDTH = 640;
-const CANVAS_HEIGHT = 480;
-const JPEG_QUALITY = 0.65;
+const CANVAS_WIDTH = 896;
+const CANVAS_HEIGHT = 672;
+const JPEG_QUALITY = 0.82;
 
 let canvas: HTMLCanvasElement | null = null;
 let ctx: CanvasRenderingContext2D | null = null;

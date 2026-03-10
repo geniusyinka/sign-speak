@@ -3,23 +3,25 @@ import { useCamera } from '../../hooks/useCamera.ts';
 import { CameraOverlay } from './CameraOverlay.tsx';
 import { CameraGuide } from './CameraGuide.tsx';
 import { initHandDetection, detectAndDraw, disposeHandDetection } from '../../utils/handDetection.ts';
+import type { LogEntry } from './DebugLog.tsx';
 
 interface CameraViewProps {
   onFrame: (frameData: string) => void;
+  onDiagnostic?: (message: string, type?: LogEntry['type']) => void;
   isActive: boolean;
   isProcessing: boolean;
   showLandmarks: boolean;
 }
 
-export function CameraView({ onFrame, isActive, isProcessing, showLandmarks }: CameraViewProps) {
+export function CameraView({ onFrame, onDiagnostic, isActive, isProcessing, showLandmarks }: CameraViewProps) {
   const { videoRef, status, startCapture, startFrameCapture, stopFrameCapture, stopCapture } =
-    useCamera(onFrame);
+    useCamera(onFrame, onDiagnostic);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef<number>(0);
 
   useEffect(() => {
     if (isActive) {
-      startCapture().then(() => startFrameCapture(5));
+      startCapture().then(() => startFrameCapture(8));
     } else {
       stopCapture();
     }
