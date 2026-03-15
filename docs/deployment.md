@@ -44,6 +44,14 @@ gcloud builds submit --config server/cloudbuild.yaml .
 
 This builds the container image and deploys `signspeak-backend` to Cloud Run.
 
+If your frontend is hosted on a public domain, pass it into Cloud Build so the backend CORS list matches production:
+
+```bash
+gcloud builds submit \
+  --config server/cloudbuild.yaml \
+  --substitutions _ALLOWED_ORIGINS=https://YOUR_FRONTEND_HOST .
+```
+
 ## 4. Verify Deployment
 
 Get the deployed URL:
@@ -76,6 +84,19 @@ For production, set the frontend WebSocket base URL to the Cloud Run backend, fo
 
 ```text
 wss://signspeak-backend-xxxxx-uc.a.run.app
+```
+
+In the frontend:
+
+```bash
+cd frontend
+cp .env.example .env.local
+```
+
+Then set:
+
+```env
+VITE_WEBSOCKET_BASE_URL=wss://signspeak-backend-xxxxx-uc.a.run.app
 ```
 
 If the frontend is hosted on Firebase Hosting or another static host, allow that origin in the backend CORS configuration.

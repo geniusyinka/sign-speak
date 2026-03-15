@@ -96,6 +96,7 @@ curl http://localhost:8080/health
 ```bash
 cd frontend
 npm install
+cp .env.example .env.local
 npm run dev
 ```
 
@@ -123,10 +124,10 @@ Recommended production shape:
 gcloud config set project YOUR_PROJECT_ID
 gcloud services enable run.googleapis.com cloudbuild.googleapis.com secretmanager.googleapis.com texttospeech.googleapis.com
 printf '%s' "$GEMINI_API_KEY" | gcloud secrets create gemini-api-key --data-file=-
-gcloud builds submit --config server/cloudbuild.yaml .
+gcloud builds submit --config server/cloudbuild.yaml --substitutions _ALLOWED_ORIGINS=https://YOUR_FRONTEND_HOST .
 ```
 
-After deployment, point the frontend at the Cloud Run backend URL for WebSocket traffic.
+After deployment, point the frontend at the Cloud Run backend URL for WebSocket traffic by setting `VITE_WEBSOCKET_BASE_URL`.
 
 ## Architecture
 
