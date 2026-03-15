@@ -14,8 +14,11 @@ export class WebSocketService {
   private shouldReconnect = true;
 
   constructor(url?: string) {
+    const configuredBase = import.meta.env.VITE_WEBSOCKET_BASE_URL?.trim();
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    this.url = url || `${protocol}//${window.location.host}/ws/conversation`;
+    const defaultBase = `${protocol}//${window.location.host}`;
+    const base = configuredBase || defaultBase;
+    this.url = url || `${base.replace(/\/$/, '')}/ws/conversation`;
   }
 
   connect(): void {
