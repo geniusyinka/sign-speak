@@ -4,6 +4,7 @@ import { DebugLog, type LogEntry } from './components/CameraView/DebugLog.tsx';
 import { TranscriptPanel } from './components/Transcript/TranscriptPanel.tsx';
 import { ModeToggle } from './components/Controls/ModeToggle.tsx';
 import { MuteButton } from './components/Controls/MuteButton.tsx';
+import { MoreMenu } from './components/Controls/MoreMenu.tsx';
 import { SettingsPanel } from './components/Controls/SettingsPanel.tsx';
 import { Button } from './components/Common/Button.tsx';
 import { Toast } from './components/Common/Toast.tsx';
@@ -12,6 +13,7 @@ import { useMicrophone } from './hooks/useMicrophone.ts';
 import { useSpeech } from './hooks/useSpeech.ts';
 import { useConversation } from './context/ConversationContext.tsx';
 import { useSettings } from './context/SettingsContext.tsx';
+import { playSuccessChime } from './utils/chime.ts';
 
 export function App() {
   const MIN_SIGN_FRAMES = 8;
@@ -20,8 +22,10 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'info' | 'error' | 'success' } | null>(null);
   const [partialText, setPartialText] = useState<string | null>(null);
+  const [lastTranslation, setLastTranslation] = useState<string | null>(null);
   const [bufferedSignFrames, setBufferedSignFrames] = useState(0);
   const [showLandmarks, setShowLandmarks] = useState(false);
+  const [translationSuccess, setTranslationSuccess] = useState(false);
   const [debugEntries, setDebugEntries] = useState<LogEntry[]>([]);
   const logIdRef = useRef(0);
   const bufferResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -88,6 +92,12 @@ export function App() {
             // Set a fallback timer: if no server audio arrives within 300ms, use browser TTS.
             // In listening mode, text is displayed for the deaf user — no TTS needed.
             if (source === 'signed') {
+              setLastTranslation(msg.text);
+              setTranslationSuccess(true);
+              setTimeout(() => setTranslationSuccess(false), 800);
+              if (!isMuted) {
+                playSuccessChime();
+              }
               if (pendingTTSRef.current) {
                 clearTimeout(pendingTTSRef.current.timer);
               }
@@ -131,7 +141,7 @@ export function App() {
       }
     });
     return unsub;
-  }, [onMessage, addMessage, speak, speakText, setIsProcessing]);
+  }, [onMessage, addMessage, speak, speakText, setIsProcessing, isMuted]);
 
   const handleStart = useCallback(() => {
     connect();
@@ -288,6 +298,9 @@ export function App() {
               isActive={isStarted}
               isProcessing={isProcessing && currentMode === 'signing'}
               showLandmarks={showLandmarks}
+              showSuccess={translationSuccess}
+              lastTranslation={lastTranslation}
+              partialText={partialText}
             />
             <DebugLog entries={debugEntries} />
           </section>
@@ -295,11 +308,6 @@ export function App() {
 
         <section className="app-main__transcript" aria-label="Conversation transcript">
           <TranscriptPanel />
-          {partialText && (
-            <div className="partial-text" aria-live="polite">
-              <span className="partial-text__label">Interpreting:</span> {partialText}
-            </div>
-          )}
         </section>
       </main>
 
@@ -320,6 +328,11 @@ export function App() {
                   Interpreting...
                 </span>
               )}
+            </>
+          )}
+          <MuteButton isMuted={isMuted} onToggle={toggleMute} />
+          <MoreMenu>
+            {currentMode === 'signing' && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -329,28 +342,27 @@ export function App() {
               >
                 Interpret Now
               </Button>
-            </>
-          )}
-          <button
-            className={`landmark-toggle ${showLandmarks ? 'landmark-toggle--active' : ''}`}
-            onClick={() => setShowLandmarks((v) => !v)}
-            aria-label={showLandmarks ? 'Hide hand detection' : 'Show hand detection'}
-            title={showLandmarks ? 'Hide hand detection' : 'Show hand detection'}
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M18 11V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2" />
-              <path d="M14 10V4a2 2 0 0 0-2-2a2 2 0 0 0-2 2v6" />
-              <path d="M10 10.5V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2v8" />
-              <path d="M18 8a2 2 0 0 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 13" />
-            </svg>
-          </button>
-          <MuteButton isMuted={isMuted} onToggle={toggleMute} />
-          <Button variant="ghost" onClick={() => setSettingsOpen(true)} aria-label="Open settings">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-              <circle cx="12" cy="12" r="3" />
-            </svg>
-          </Button>
+            )}
+            <button
+              className={`landmark-toggle ${showLandmarks ? 'landmark-toggle--active' : ''}`}
+              onClick={() => setShowLandmarks((v) => !v)}
+              aria-label={showLandmarks ? 'Hide hand detection' : 'Show hand detection'}
+              title={showLandmarks ? 'Hide hand detection' : 'Show hand detection'}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 11V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2" />
+                <path d="M14 10V4a2 2 0 0 0-2-2a2 2 0 0 0-2 2v6" />
+                <path d="M10 10.5V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2v8" />
+                <path d="M18 8a2 2 0 0 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 13" />
+              </svg>
+            </button>
+            <Button variant="ghost" onClick={() => setSettingsOpen(true)} aria-label="Open settings">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+            </Button>
+          </MoreMenu>
           <Button variant="secondary" size="sm" onClick={handleStop}>
             End Session
           </Button>

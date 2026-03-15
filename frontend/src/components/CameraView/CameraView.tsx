@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useCamera } from '../../hooks/useCamera.ts';
 import { CameraOverlay } from './CameraOverlay.tsx';
 import { CameraGuide } from './CameraGuide.tsx';
+import { TranslationOverlay } from './TranslationOverlay.tsx';
 import { initHandDetection, detectAndDraw, disposeHandDetection } from '../../utils/handDetection.ts';
 import type { LogEntry } from './DebugLog.tsx';
 
@@ -11,9 +12,12 @@ interface CameraViewProps {
   isActive: boolean;
   isProcessing: boolean;
   showLandmarks: boolean;
+  showSuccess?: boolean;
+  lastTranslation: string | null;
+  partialText: string | null;
 }
 
-export function CameraView({ onFrame, onDiagnostic, isActive, isProcessing, showLandmarks }: CameraViewProps) {
+export function CameraView({ onFrame, onDiagnostic, isActive, isProcessing, showLandmarks, showSuccess, lastTranslation, partialText }: CameraViewProps) {
   const { videoRef, status, startCapture, startFrameCapture, stopFrameCapture, stopCapture } =
     useCamera(onFrame, onDiagnostic);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -69,11 +73,13 @@ export function CameraView({ onFrame, onDiagnostic, isActive, isProcessing, show
     <div className="camera-view">
       <div
         className={`camera-view__container ${
-          isProcessing
-            ? 'camera-view__container--processing'
-            : status.isActive
-              ? 'camera-view__container--ready'
-              : ''
+          showSuccess
+            ? 'camera-view__container--success'
+            : isProcessing
+              ? 'camera-view__container--processing'
+              : status.isActive
+                ? 'camera-view__container--ready'
+                : ''
         }`}
       >
         <video
@@ -90,6 +96,7 @@ export function CameraView({ onFrame, onDiagnostic, isActive, isProcessing, show
           aria-hidden="true"
         />
         <CameraOverlay status={status} isProcessing={isProcessing} />
+        <TranslationOverlay text={lastTranslation} partial={partialText} />
         {!status.isActive && <CameraGuide />}
       </div>
     </div>
