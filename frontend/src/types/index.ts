@@ -5,6 +5,8 @@ export interface ConversationMessage {
   text: string;
   speaker: 'user' | 'other';
   confidence?: number;
+  participantId?: string;
+  participantName?: string;
 }
 
 export interface ConversationSession {
@@ -29,6 +31,7 @@ export type WSMessageType =
   | 'video_frame'
   | 'audio_chunk'
   | 'end_turn'
+  | 'room_state'
   | 'translation'
   | 'partial'
   | 'audio'
@@ -45,6 +48,23 @@ export interface WSMessage {
   confidence?: number;
   source?: 'signed' | 'spoken';
   status?: 'ready' | 'processing' | 'error';
+  roomId?: string;
+  participantId?: string;
+  participantName?: string;
+  participantCount?: number;
+  participants?: RoomParticipant[];
+}
+
+export interface RoomConnectionOptions {
+  roomId?: string;
+  participantId?: string;
+  participantName?: string;
+}
+
+export interface RoomParticipant {
+  participantId: string;
+  participantName: string;
+  activity: 'idle' | 'signing' | 'speaking' | 'processing' | string;
 }
 
 export interface CameraStatus {

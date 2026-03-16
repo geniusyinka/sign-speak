@@ -1,4 +1,4 @@
-import type { WSMessage } from '../types/index.ts';
+import type { RoomConnectionOptions, WSMessage } from '../types/index.ts';
 
 type MessageHandler = (message: WSMessage) => void;
 type StatusHandler = (status: 'connecting' | 'connected' | 'disconnected' | 'error') => void;
@@ -13,12 +13,18 @@ export class WebSocketService {
   private url: string;
   private shouldReconnect = true;
 
-  constructor(url?: string) {
+  constructor(url?: string, options: RoomConnectionOptions = {}) {
     const configuredBase = import.meta.env.VITE_WEBSOCKET_BASE_URL?.trim();
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const defaultBase = `${protocol}//${window.location.host}`;
     const base = configuredBase || defaultBase;
-    this.url = url || `${base.replace(/\/$/, '')}/ws/conversation`;
+    const endpoint = url || `${base.replace(/\/$/, '')}/ws/conversation`;
+    const query = new URLSearchParams();
+    if (options.roomId) query.set('room_id', options.roomId);
+    if (options.participantId) query.set('participant_id', options.participantId);
+    if (options.participantName) query.set('participant_name', options.participantName);
+    const suffix = query.toString();
+    this.url = suffix ? `${endpoint}?${suffix}` : endpoint;
   }
 
   connect(): void {

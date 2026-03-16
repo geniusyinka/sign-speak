@@ -4,7 +4,6 @@ import { DebugLog, type LogEntry } from './components/CameraView/DebugLog.tsx';
 import { TranscriptPanel } from './components/Transcript/TranscriptPanel.tsx';
 import { ModeToggle } from './components/Controls/ModeToggle.tsx';
 import { MuteButton } from './components/Controls/MuteButton.tsx';
-import { MoreMenu } from './components/Controls/MoreMenu.tsx';
 import { SettingsPanel } from './components/Controls/SettingsPanel.tsx';
 import { Button } from './components/Common/Button.tsx';
 import { Toast } from './components/Common/Toast.tsx';
@@ -14,6 +13,22 @@ import { useSpeech } from './hooks/useSpeech.ts';
 import { useConversation } from './context/ConversationContext.tsx';
 import { useSettings } from './context/SettingsContext.tsx';
 import { playSuccessChime } from './utils/chime.ts';
+import type { RoomParticipant } from './types/index.ts';
+
+interface ActiveRoomSession {
+  roomId: string;
+  participantId: string;
+  participantName: string;
+  participantCount: number;
+}
+
+function normalizeRoomCode(value: string): string {
+  return value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
+}
+
+function generateRoomCode(): string {
+  return Math.random().toString(36).slice(2, 8).toUpperCase();
+}
 
 export function App() {
   const MIN_SIGN_FRAMES = 8;
@@ -26,12 +41,19 @@ export function App() {
   const [lastTranslation, setLastTranslation] = useState<string | null>(null);
   const [bufferedSignFrames, setBufferedSignFrames] = useState(0);
   const [showLandmarks, setShowLandmarks] = useState(false);
+  const [showDebugLog, setShowDebugLog] = useState(false);
   const [translationSuccess, setTranslationSuccess] = useState(false);
   const [handsVisible, setHandsVisible] = useState(false);
   const [debugEntries, setDebugEntries] = useState<LogEntry[]>([]);
+  const [roomCodeInput, setRoomCodeInput] = useState('');
+  const [participantNameInput, setParticipantNameInput] = useState('');
+  const [activeRoom, setActiveRoom] = useState<ActiveRoomSession | null>(null);
+  const [roomParticipants, setRoomParticipants] = useState<RoomParticipant[]>([]);
+  const [inviteCopied, setInviteCopied] = useState(false);
   const logIdRef = useRef(0);
   const handsDownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const signSessionActiveRef = useRef(false);
+  const activeRoomRef = useRef<ActiveRoomSession | null>(null);
 
   const addLog = useCallback((message: string, type: LogEntry['type'] = 'info') => {
     setDebugEntries((prev) => {
@@ -45,6 +67,7 @@ export function App() {
   const {
     messages,
     addMessage,
+    clearMessages,
     currentMode,
     setCurrentMode,
     isProcessing,
@@ -64,9 +87,23 @@ export function App() {
   const { startCapture: startMic, stopCapture: stopMic } = useMicrophone(handleAudioChunk);
   const canInterpretSign =
     connectionStatus === 'connected' && !isProcessing && bufferedSignFrames >= MIN_SIGN_FRAMES;
+  const roomInviteUrl = activeRoom
+    ? `${window.location.origin}${window.location.pathname}?room=${activeRoom.roomId}`
+    : '';
 
   // Track pending translation text for browser TTS fallback
   const pendingTTSRef = useRef<{ text: string; timer: ReturnType<typeof setTimeout> } | null>(null);
+
+  useEffect(() => {
+    activeRoomRef.current = activeRoom;
+  }, [activeRoom]);
+
+  useEffect(() => {
+    const prefilledRoom = normalizeRoomCode(new URLSearchParams(window.location.search).get('room') ?? '');
+    if (prefilledRoom) {
+      setRoomCodeInput(prefilledRoom);
+    }
+  }, []);
 
   // Handle WebSocket messages
   useEffect(() => {
@@ -85,17 +122,23 @@ export function App() {
             setBufferedSignFrames(0);
             signSessionActiveRef.current = false;
             const source = msg.source ?? 'spoken';
+            const localRoom = activeRoomRef.current;
+            const isOwnParticipant = localRoom && msg.participantId
+              ? msg.participantId === localRoom.participantId
+              : source === 'signed';
             addMessage({
               type: source,
               text: msg.text,
-              speaker: source === 'signed' ? 'user' : 'other',
+              speaker: isOwnParticipant ? 'user' : 'other',
               confidence: msg.confidence,
+              participantId: msg.participantId,
+              participantName: msg.participantName,
             });
 
             // In signing mode, speak the translation aloud for the hearing person.
             // Set a fallback timer: if no server audio arrives within 300ms, use browser TTS.
             // In listening mode, text is displayed for the deaf user — no TTS needed.
-            if (source === 'signed') {
+            if (source === 'signed' && isOwnParticipant) {
               setLastTranslation(msg.text);
               setTranslationSuccess(true);
               setTimeout(() => setTranslationSuccess(false), 800);
@@ -132,6 +175,28 @@ export function App() {
             signSessionActiveRef.current = false;
           }
           break;
+        case 'room_state':
+          if (msg.roomId) {
+            setRoomParticipants(msg.participants ?? []);
+            setActiveRoom((prev) => {
+              if (!prev) {
+                return {
+                  roomId: msg.roomId!,
+                  participantId: msg.participantId ?? '',
+                  participantName: msg.participantName ?? 'Guest',
+                  participantCount: msg.participantCount ?? 1,
+                };
+              }
+              return {
+                ...prev,
+                roomId: msg.roomId ?? prev.roomId,
+                participantId: msg.participantId ?? prev.participantId,
+                participantName: msg.participantName ?? prev.participantName,
+                participantCount: msg.participantCount ?? prev.participantCount,
+              };
+            });
+          }
+          break;
         case 'debug':
           if (msg.message) {
             const isModel = msg.message.startsWith('Gemini response:');
@@ -148,11 +213,73 @@ export function App() {
     return unsub;
   }, [onMessage, addMessage, speak, speakText, setIsProcessing, isMuted]);
 
-  const handleStart = useCallback(() => {
-    connect();
+  const updateRoomUrl = useCallback((roomId: string | null) => {
+    const nextUrl = roomId
+      ? `${window.location.pathname}?room=${roomId}`
+      : window.location.pathname;
+    window.history.replaceState({}, '', nextUrl);
+  }, []);
+
+  const beginSession = useCallback((roomSession: ActiveRoomSession | null) => {
+    clearMessages();
+    setPartialText(null);
+    setLastTranslation(null);
+    setBufferedSignFrames(0);
+    setDebugEntries([]);
+    logIdRef.current = 0;
+    setInviteCopied(false);
+    setRoomParticipants([]);
+    connect(
+      roomSession
+        ? {
+            roomId: roomSession.roomId,
+            participantId: roomSession.participantId,
+            participantName: roomSession.participantName,
+          }
+        : undefined
+    );
+    setActiveRoom(roomSession);
+    updateRoomUrl(roomSession?.roomId ?? null);
     setIsStarted(true);
     setCurrentMode('signing');
-  }, [connect, setCurrentMode]);
+  }, [clearMessages, connect, setCurrentMode, updateRoomUrl]);
+
+  const handleStart = useCallback(() => {
+    beginSession(null);
+  }, [beginSession]);
+
+  const handleCreateRoom = useCallback(() => {
+    const roomId = generateRoomCode();
+    const participantName = participantNameInput.trim() || 'Host';
+    setRoomCodeInput(roomId);
+    beginSession({
+      roomId,
+      participantId: crypto.randomUUID(),
+      participantName,
+      participantCount: 1,
+    });
+  }, [beginSession, participantNameInput]);
+
+  const handleJoinRoom = useCallback(() => {
+    const roomId = normalizeRoomCode(roomCodeInput);
+    if (!roomId) {
+      setToast({ message: 'Enter a room code to join', type: 'error' });
+      return;
+    }
+    beginSession({
+      roomId,
+      participantId: crypto.randomUUID(),
+      participantName: participantNameInput.trim() || 'Guest',
+      participantCount: 1,
+    });
+  }, [beginSession, participantNameInput, roomCodeInput]);
+
+  const handleCopyInvite = useCallback(async () => {
+    if (!roomInviteUrl) return;
+    await navigator.clipboard.writeText(roomInviteUrl);
+    setInviteCopied(true);
+    setTimeout(() => setInviteCopied(false), 1500);
+  }, [roomInviteUrl]);
 
   const handleStop = useCallback(() => {
     if (handsDownTimerRef.current) {
@@ -162,11 +289,18 @@ export function App() {
     disconnect();
     stopMic();
     setIsStarted(false);
+    if (activeRoomRef.current) {
+      setRoomCodeInput(activeRoomRef.current.roomId);
+    }
     setBufferedSignFrames(0);
     setHandsVisible(false);
     signSessionActiveRef.current = false;
+    setActiveRoom(null);
+    setRoomParticipants([]);
+    clearMessages();
+    updateRoomUrl(null);
     setCurrentMode('idle');
-  }, [disconnect, stopMic, setCurrentMode]);
+  }, [clearMessages, disconnect, stopMic, setCurrentMode, updateRoomUrl]);
 
   const handleModeChange = useCallback(
     (mode: 'signing' | 'listening' | 'idle') => {
@@ -318,6 +452,40 @@ export function App() {
             <Button size="lg" onClick={handleStart}>
               Get Started
             </Button>
+            <div className="landing__room-card">
+              <div className="landing__room-header">
+                <h2>Shared Room</h2>
+                <p>Create a room or join one without changing the solo experience.</p>
+              </div>
+              <div className="landing__room-fields">
+                <label className="landing__field">
+                  <span>Your name</span>
+                  <input
+                    value={participantNameInput}
+                    onChange={(e) => setParticipantNameInput(e.target.value)}
+                    placeholder="Ava"
+                    maxLength={40}
+                  />
+                </label>
+                <label className="landing__field">
+                  <span>Room code</span>
+                  <input
+                    value={roomCodeInput}
+                    onChange={(e) => setRoomCodeInput(normalizeRoomCode(e.target.value))}
+                    placeholder="AB12CD"
+                    maxLength={8}
+                  />
+                </label>
+              </div>
+              <div className="landing__room-actions">
+                <Button variant="secondary" onClick={handleCreateRoom}>
+                  Create Room
+                </Button>
+                <Button onClick={handleJoinRoom}>
+                  Join Room
+                </Button>
+              </div>
+            </div>
             <div className="landing__permissions">
               <p>SignSpeak needs access to:</p>
               <ul>
@@ -333,35 +501,77 @@ export function App() {
   }
 
   const showCamera = currentMode === 'signing' || !settings.autoHideCamera;
+  const remoteParticipants = activeRoom
+    ? roomParticipants.filter((participant) => participant.participantId !== activeRoom.participantId)
+    : [];
 
   return (
     <div className={`app ${settings.highContrast ? 'app--high-contrast' : ''}`}>
       <header className="app-header">
         <h1 className="app-header__title">SignSpeak</h1>
-        <div className="app-header__status">
-          <span
-            className={`status-dot status-dot--${connectionStatus}`}
-            aria-label={`Connection: ${connectionStatus}`}
-          />
-          <span className="app-header__status-text">{connectionStatus}</span>
+        <div className="app-header__meta">
+          {activeRoom && (
+            <div className="app-header__room">
+              <span>Room {activeRoom.roomId}</span>
+              <span>{activeRoom.participantCount} {activeRoom.participantCount === 1 ? 'person' : 'people'}</span>
+              <button className="app-header__room-copy" onClick={handleCopyInvite}>
+                {inviteCopied ? 'Copied' : 'Copy invite'}
+              </button>
+            </div>
+          )}
+          <div className="app-header__status">
+            <span
+              className={`status-dot status-dot--${connectionStatus}`}
+              aria-label={`Connection: ${connectionStatus}`}
+            />
+            <span className="app-header__status-text">{connectionStatus}</span>
+          </div>
         </div>
       </header>
 
       <main className="app-main">
         {showCamera && (
           <section className="app-main__camera" aria-label="Camera view">
-            <CameraView
-              onFrame={handleFrame}
-              onDiagnostic={addLog}
-              onDetectionStateChange={handleDetectionStateChange}
-              isActive={isStarted}
-              isProcessing={isProcessing && currentMode === 'signing'}
-              showLandmarks={showLandmarks}
-              showSuccess={translationSuccess}
-              lastTranslation={lastTranslation}
-              partialText={partialText}
-            />
-            <DebugLog entries={debugEntries} />
+            <div className="app-main__camera-stack">
+              <CameraView
+                onFrame={handleFrame}
+                onDiagnostic={addLog}
+                onDetectionStateChange={handleDetectionStateChange}
+                isActive={isStarted}
+                isProcessing={isProcessing && currentMode === 'signing'}
+                showLandmarks={showLandmarks}
+                showSuccess={translationSuccess}
+                lastTranslation={lastTranslation}
+                partialText={partialText}
+              />
+              {activeRoom && (
+                <div className="room-presence">
+                  <div className="room-presence__tile room-presence__tile--self">
+                    <div className="room-presence__label">You</div>
+                    <div className="room-presence__name">{activeRoom.participantName}</div>
+                    <div className="room-presence__state">
+                      {roomParticipants.find((participant) => participant.participantId === activeRoom.participantId)?.activity ?? 'ready'}
+                    </div>
+                  </div>
+                  {remoteParticipants.length > 0 ? (
+                    remoteParticipants.map((participant) => (
+                      <div key={participant.participantId} className="room-presence__tile">
+                        <div className="room-presence__label">Remote</div>
+                        <div className="room-presence__name">{participant.participantName}</div>
+                        <div className="room-presence__state">{participant.activity}</div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="room-presence__tile room-presence__tile--waiting">
+                      <div className="room-presence__label">Remote</div>
+                      <div className="room-presence__name">Waiting for someone to join</div>
+                      <div className="room-presence__state">idle</div>
+                    </div>
+                  )}
+                </div>
+              )}
+              {showDebugLog && <DebugLog entries={debugEntries} />}
+            </div>
           </section>
         )}
 
@@ -396,7 +606,7 @@ export function App() {
             </>
           )}
           <button
-            className={`landmark-toggle ${showLandmarks ? 'landmark-toggle--active' : ''}`}
+            className={`control-icon-button ${showLandmarks ? 'control-icon-button--active' : ''}`}
             onClick={() => setShowLandmarks((v) => !v)}
             aria-label={showLandmarks ? 'Hide hand detection' : 'Show hand detection'}
             title={showLandmarks ? 'Hide hand detection' : 'Show hand detection'}
@@ -408,26 +618,41 @@ export function App() {
               <path d="M18 8a2 2 0 0 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 13" />
             </svg>
           </button>
+          <button
+            className={`control-icon-button ${settingsOpen ? 'control-icon-button--active' : ''}`}
+            onClick={() => setSettingsOpen(true)}
+            aria-label="Open settings"
+            title="Open settings"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+          </button>
+          <button
+            className={`control-icon-button ${showDebugLog ? 'control-icon-button--active' : ''}`}
+            onClick={() => setShowDebugLog((value) => !value)}
+            aria-label={showDebugLog ? 'Hide activity log' : 'Show activity log'}
+            title={showDebugLog ? 'Hide activity log' : 'Show activity log'}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 6h16" />
+              <path d="M4 12h10" />
+              <path d="M4 18h7" />
+            </svg>
+          </button>
           <MuteButton isMuted={isMuted} onToggle={toggleMute} />
-          <MoreMenu>
-            {currentMode === 'signing' && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleInterpretSign}
-                disabled={!canInterpretSign}
-                title="Force interpret now"
-              >
-                Interpret Now
-              </Button>
-            )}
-            <Button variant="ghost" onClick={() => setSettingsOpen(true)} aria-label="Open settings">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                <circle cx="12" cy="12" r="3" />
-              </svg>
+          {currentMode === 'signing' && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleInterpretSign}
+              disabled={!canInterpretSign}
+              title="Force interpret now"
+            >
+              Interpret Now
             </Button>
-          </MoreMenu>
+          )}
           <Button variant="secondary" size="sm" onClick={handleStop}>
             End Session
           </Button>
@@ -449,8 +674,9 @@ export function App() {
       {messages.length === 0 && isStarted && !isProcessing && (
         <div className="onboarding-tip" aria-live="polite">
           <p>
-            Sign to the camera — keep your hands up for the full phrase, then lower them to finalize.
-            Or switch to Listen Mode for speech-to-text.
+            {activeRoom
+              ? `Share room ${activeRoom.roomId} so someone else can join, then sign or speak to start the shared transcript.`
+              : 'Sign to the camera — keep your hands up for the full phrase, then lower them to finalize. Or switch to Listen Mode for speech-to-text.'}
           </p>
         </div>
       )}

@@ -213,6 +213,61 @@ body {
   animation: landingFadeIn 0.8s ease-out 0.4s both;
 }
 
+.landing__room-card {
+  margin-top: var(--space-lg);
+  padding: var(--space-lg);
+  border: 1px solid rgba(13,148,136,0.18);
+  border-radius: var(--radius-xl);
+  background: linear-gradient(180deg, rgba(13,148,136,0.06), rgba(13,148,136,0.02));
+  text-align: left;
+  animation: landingFadeIn 0.8s ease-out 0.45s both;
+}
+
+.landing__room-header h2 {
+  font-family: 'Outfit', sans-serif;
+  font-size: 1.15rem;
+  margin-bottom: var(--space-xs);
+}
+
+.landing__room-header p {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.landing__room-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+}
+
+.landing__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.landing__field input {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 var(--space-md);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font: inherit;
+}
+
+.landing__room-actions {
+  display: flex;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+}
+
 .landing__permissions {
   margin-top: var(--space-xl);
   padding: var(--space-md) var(--space-lg);
@@ -282,6 +337,12 @@ body {
   letter-spacing: -0.02em;
 }
 
+.app-header__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
 .app-header__status {
   display: flex;
   align-items: center;
@@ -289,6 +350,29 @@ body {
   font-size: 0.8rem;
   color: var(--text-tertiary);
   font-weight: 500;
+}
+
+.app-header__room {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  padding: 0 var(--space-md);
+  border: 1px solid rgba(13,148,136,0.2);
+  border-radius: var(--radius-full);
+  background: rgba(13,148,136,0.06);
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.app-header__room-copy {
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
 }
 
 .status-dot {
@@ -320,6 +404,61 @@ body {
   align-items: center;
   justify-content: center;
   background: var(--bg-primary);
+}
+
+.app-main__camera-stack {
+  width: 100%;
+  max-width: 640px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.room-presence {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-sm);
+}
+
+.room-presence__tile {
+  min-height: 88px;
+  padding: var(--space-md);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background: var(--bg-secondary);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.room-presence__tile--self {
+  border-color: rgba(13,148,136,0.28);
+  background: rgba(13,148,136,0.06);
+}
+
+.room-presence__tile--waiting {
+  background: linear-gradient(180deg, rgba(120,113,108,0.08), rgba(120,113,108,0.02));
+}
+
+.room-presence__label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.room-presence__name {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.room-presence__state {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--accent);
+  text-transform: capitalize;
 }
 
 .app-main__transcript {
@@ -759,8 +898,8 @@ body {
   box-shadow: var(--shadow-sm);
 }
 
-/* ===== Landmark Toggle ===== */
-.landmark-toggle {
+/* ===== Icon Controls ===== */
+.control-icon-button {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -774,17 +913,17 @@ body {
   transition: all 0.2s;
 }
 
-.landmark-toggle:hover {
+.control-icon-button:hover {
   background: var(--bg-tertiary);
   color: var(--text-primary);
 }
 
-.landmark-toggle--active {
+.control-icon-button--active {
   color: var(--accent);
   background: var(--accent-subtle);
 }
 
-.landmark-toggle--active:hover {
+.control-icon-button--active:hover {
   background: rgba(13,148,136,0.12);
 }
 
@@ -923,71 +1062,6 @@ body {
 .sign-buffer-status--processing {
   color: var(--status-processing);
   animation: pulse-text 1.2s ease-in-out infinite;
-}
-
-/* ===== More Menu ===== */
-.more-menu {
-  position: relative;
-  display: inline-flex;
-}
-
-.more-menu__trigger {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  border: none;
-  border-radius: var(--radius-full);
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: all 0.2s;
-  font-family: inherit;
-}
-
-.more-menu__trigger:hover {
-  background: var(--bg-tertiary);
-  color: var(--text-primary);
-}
-
-.more-menu__popover {
-  position: absolute;
-  bottom: calc(100% + 8px);
-  right: 0;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: var(--space-sm);
-  box-shadow: var(--shadow-lg);
-  min-width: 180px;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
-  z-index: 50;
-  animation: moreMenuIn 0.15s ease-out;
-}
-
-.more-menu__popover > * {
-  width: 100%;
-  text-align: left;
-  justify-content: flex-start;
-}
-
-.more-menu__popover > button:hover,
-.more-menu__popover > .btn:hover {
-  background: var(--bg-tertiary);
-}
-
-@keyframes moreMenuIn {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 
 @keyframes pulse-text {
@@ -1371,6 +1445,14 @@ body {
     padding: var(--space-sm);
   }
 
+  .app-main__camera-stack {
+    max-width: none;
+  }
+
+  .room-presence {
+    grid-template-columns: 1fr;
+  }
+
   .app-main__transcript {
     flex: 1;
     border-left: none;
@@ -1390,6 +1472,24 @@ body {
 
   .app-header {
     padding: var(--space-sm) var(--space-md);
+  }
+
+  .app-header__meta {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .app-header__room {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .landing__room-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .landing__room-actions {
+    flex-direction: column;
   }
 
   .landing__title {
