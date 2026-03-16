@@ -15,6 +15,8 @@ from prompts.sign_recognition import (
 
 logger = logging.getLogger(__name__)
 
+MAX_VISION_FRAMES = 18
+
 # Vision model for sign recognition
 VISION_MODEL = "gemini-2.5-flash"
 
@@ -116,7 +118,7 @@ class GeminiService:
         prompt = self._build_prompt(MULTI_FRAME_PROMPT, conversation_history)
 
         parts = []
-        for i, frame in enumerate(frames[-12:]):
+        for frame in _sample_frames(frames, MAX_VISION_FRAMES):
             parts.append(
                 types.Part(
                     inline_data=types.Blob(
@@ -218,6 +220,17 @@ class GeminiService:
                             }
                 if response.server_content.turn_complete:
                     yield {"type": "turn_complete"}
+
+
+def _sample_frames(frames: list[bytes], limit: int) -> list[bytes]:
+    if len(frames) <= limit:
+        return frames
+
+    if limit <= 1:
+        return [frames[-1]]
+
+    step = (len(frames) - 1) / (limit - 1)
+    return [frames[round(i * step)] for i in range(limit)]
 
 
 def _pcm_to_wav(

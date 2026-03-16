@@ -4,6 +4,7 @@ import { CameraOverlay } from './CameraOverlay.tsx';
 import { CameraGuide } from './CameraGuide.tsx';
 import { TranslationOverlay } from './TranslationOverlay.tsx';
 import { initHandDetection, detectAndDraw, disposeHandDetection } from '../../utils/handDetection.ts';
+import type { SignDetectionState } from '../../types/index.ts';
 import type { LogEntry } from './DebugLog.tsx';
 
 interface CameraViewProps {
@@ -15,11 +16,12 @@ interface CameraViewProps {
   showSuccess?: boolean;
   lastTranslation: string | null;
   partialText: string | null;
+  onDetectionStateChange?: (state: SignDetectionState) => void;
 }
 
-export function CameraView({ onFrame, onDiagnostic, isActive, isProcessing, showLandmarks, showSuccess, lastTranslation, partialText }: CameraViewProps) {
+export function CameraView({ onFrame, onDiagnostic, isActive, isProcessing, showLandmarks, showSuccess, lastTranslation, partialText, onDetectionStateChange }: CameraViewProps) {
   const { videoRef, status, startCapture, startFrameCapture, stopFrameCapture, stopCapture } =
-    useCamera(onFrame, onDiagnostic);
+    useCamera(onFrame, onDiagnostic, onDetectionStateChange);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef<number>(0);
 

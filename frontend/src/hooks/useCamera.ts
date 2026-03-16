@@ -2,12 +2,13 @@ import { useRef, useState, useCallback, useEffect } from 'react';
 import { CameraService } from '../services/CameraService.ts';
 import { captureFrame, calculateBrightness, detectMotion, resetMotionDetection } from '../utils/frameEncoder.ts';
 import { initHandDetection, detectHands } from '../utils/handDetection.ts';
-import type { CameraStatus } from '../types/index.ts';
+import type { CameraStatus, SignDetectionState } from '../types/index.ts';
 import type { LogEntry } from '../components/CameraView/DebugLog.tsx';
 
 export function useCamera(
   onFrame?: (frameData: string) => void,
-  onDiagnostic?: (message: string, type?: LogEntry['type']) => void
+  onDiagnostic?: (message: string, type?: LogEntry['type']) => void,
+  onDetectionStateChange?: (state: SignDetectionState) => void
 ) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const cameraService = useRef(new CameraService());
@@ -15,6 +16,7 @@ export function useCamera(
   const analysisInFlightRef = useRef(false);
   const lastFramingRef = useRef<CameraStatus['framing']>('good');
   const lastMotionRef = useRef(false);
+  const lastHandsVisibleRef = useRef(false);
   const [status, setStatus] = useState<CameraStatus>({
     isActive: false,
     hasPermission: false,
@@ -49,6 +51,16 @@ export function useCamera(
 
         try {
           const handSummary = await detectHands(videoRef.current);
+          const handsVisible = handSummary.handCount > 0;
+          if (handsVisible !== lastHandsVisibleRef.current) {
+            lastHandsVisibleRef.current = handsVisible;
+            onDetectionStateChange?.({
+              handsVisible,
+              hasMotion: lastMotionRef.current,
+              handCount: handSummary.handCount,
+              framing: handSummary.framing,
+            });
+          }
           if (handSummary.framing !== 'good') {
             if (lastFramingRef.current !== handSummary.framing) {
               lastFramingRef.current = handSummary.framing;
@@ -75,8 +87,13 @@ export function useCamera(
           if (hasMotion !== lastMotionRef.current) {
             lastMotionRef.current = hasMotion;
             onDiagnostic?.(hasMotion ? 'Signing motion detected' : 'Motion paused');
+            onDetectionStateChange?.({
+              handsVisible,
+              hasMotion,
+              handCount: handSummary.handCount,
+              framing: handSummary.framing,
+            });
           }
-          if (!hasMotion) return;
 
           const brightness = calculateBrightness(videoRef.current);
           setStatus((s) => ({
@@ -94,7 +111,7 @@ export function useCamera(
         }
       }, intervalMs);
     },
-    [onFrame]
+    [onDetectionStateChange, onDiagnostic, onFrame]
   );
 
   const stopFrameCapture = useCallback(() => {
@@ -111,6 +128,7 @@ export function useCamera(
     resetMotionDetection();
     lastFramingRef.current = 'good';
     lastMotionRef.current = false;
+    lastHandsVisibleRef.current = false;
     onDiagnostic?.('Camera capture stopped');
     setStatus((s) => ({ ...s, isActive: false, framing: 'good' }));
   }, [stopFrameCapture, onDiagnostic]);

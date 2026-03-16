@@ -17,7 +17,8 @@ import { playSuccessChime } from './utils/chime.ts';
 
 export function App() {
   const MIN_SIGN_FRAMES = 8;
-  const AUTO_SUBMIT_PAUSE_MS = 700;
+  const MAX_SIGN_FRAMES = 48;
+  const HANDS_DOWN_GRACE_MS = 900;
   const [isStarted, setIsStarted] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'info' | 'error' | 'success' } | null>(null);
@@ -26,9 +27,11 @@ export function App() {
   const [bufferedSignFrames, setBufferedSignFrames] = useState(0);
   const [showLandmarks, setShowLandmarks] = useState(false);
   const [translationSuccess, setTranslationSuccess] = useState(false);
+  const [handsVisible, setHandsVisible] = useState(false);
   const [debugEntries, setDebugEntries] = useState<LogEntry[]>([]);
   const logIdRef = useRef(0);
-  const bufferResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handsDownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const signSessionActiveRef = useRef(false);
 
   const addLog = useCallback((message: string, type: LogEntry['type'] = 'info') => {
     setDebugEntries((prev) => {
@@ -80,6 +83,7 @@ export function App() {
             setPartialText(null);
             setIsProcessing(false);
             setBufferedSignFrames(0);
+            signSessionActiveRef.current = false;
             const source = msg.source ?? 'spoken';
             addMessage({
               type: source,
@@ -125,6 +129,7 @@ export function App() {
           } else if (msg.status === 'ready') {
             setIsProcessing(false);
             setBufferedSignFrames(0);
+            signSessionActiveRef.current = false;
           }
           break;
         case 'debug':
@@ -150,10 +155,16 @@ export function App() {
   }, [connect, setCurrentMode]);
 
   const handleStop = useCallback(() => {
+    if (handsDownTimerRef.current) {
+      clearTimeout(handsDownTimerRef.current);
+      handsDownTimerRef.current = null;
+    }
     disconnect();
     stopMic();
     setIsStarted(false);
     setBufferedSignFrames(0);
+    setHandsVisible(false);
+    signSessionActiveRef.current = false;
     setCurrentMode('idle');
   }, [disconnect, stopMic, setCurrentMode]);
 
@@ -163,6 +174,12 @@ export function App() {
       sendEndTurn();
       setCurrentMode(mode);
       setBufferedSignFrames(0);
+      setHandsVisible(false);
+      signSessionActiveRef.current = false;
+      if (handsDownTimerRef.current) {
+        clearTimeout(handsDownTimerRef.current);
+        handsDownTimerRef.current = null;
+      }
 
       if (mode === 'listening') {
         startMic();
@@ -176,6 +193,11 @@ export function App() {
   const handleInterpretSign = useCallback(() => {
     if (bufferedSignFrames < MIN_SIGN_FRAMES) return;
     addLog(`Submitting sign clip with ${bufferedSignFrames} buffered frame(s)`);
+    signSessionActiveRef.current = false;
+    if (handsDownTimerRef.current) {
+      clearTimeout(handsDownTimerRef.current);
+      handsDownTimerRef.current = null;
+    }
     setIsProcessing(true);
     sendEndTurn();
   }, [bufferedSignFrames, sendEndTurn, setIsProcessing, addLog]);
@@ -188,27 +210,63 @@ export function App() {
     bufferedSignFramesRef.current = bufferedSignFrames;
   }, [bufferedSignFrames]);
 
+  const finalizeSigningSegment = useCallback(() => {
+    handsDownTimerRef.current = null;
+    signSessionActiveRef.current = false;
+
+    if (bufferedSignFramesRef.current >= MIN_SIGN_FRAMES) {
+      addLog(
+        `Hands lowered; interpreting signed phrase (${bufferedSignFramesRef.current} frames collected)`
+      );
+      setIsProcessing(true);
+      sendEndTurn();
+      return;
+    }
+
+    if (bufferedSignFramesRef.current > 0) {
+      addLog(
+        `Hands lowered before enough context was captured (${bufferedSignFramesRef.current}/${MIN_SIGN_FRAMES} frames)`,
+        'info'
+      );
+    }
+    setBufferedSignFrames(0);
+  }, [MIN_SIGN_FRAMES, addLog, sendEndTurn, setIsProcessing]);
+
+  const handleDetectionStateChange = useCallback(
+    ({ handsVisible: nextHandsVisible }: { handsVisible: boolean }) => {
+      setHandsVisible(nextHandsVisible);
+
+      if (currentMode !== 'signing' || isProcessing || !settings.handsDownSegmentation) {
+        return;
+      }
+
+      if (nextHandsVisible) {
+        if (handsDownTimerRef.current) {
+          clearTimeout(handsDownTimerRef.current);
+          handsDownTimerRef.current = null;
+          addLog('Hands re-entered frame; continuing current signed phrase');
+        } else if (!signSessionActiveRef.current) {
+          addLog('Hands detected; started a signing phrase');
+        }
+        signSessionActiveRef.current = true;
+        return;
+      }
+
+      if (!signSessionActiveRef.current || handsDownTimerRef.current) {
+        return;
+      }
+
+      addLog(`Hands left frame; finalizing phrase in ${HANDS_DOWN_GRACE_MS}ms unless signing resumes`);
+      handsDownTimerRef.current = setTimeout(finalizeSigningSegment, HANDS_DOWN_GRACE_MS);
+    },
+    [HANDS_DOWN_GRACE_MS, addLog, currentMode, finalizeSigningSegment, isProcessing, settings.handsDownSegmentation]
+  );
+
   const handleFrame = useCallback(
     (frameData: string) => {
       if (currentMode === 'signing' && !isProcessing) {
         frameCountRef.current++;
-        if (bufferResetTimerRef.current) {
-          clearTimeout(bufferResetTimerRef.current);
-        }
-        setBufferedSignFrames((count) => Math.min(count + 1, 24));
-
-        // When motion pauses, auto-submit if we have enough frames
-        bufferResetTimerRef.current = setTimeout(() => {
-          bufferResetTimerRef.current = null;
-          if (bufferedSignFramesRef.current >= MIN_SIGN_FRAMES) {
-            addLog(`Auto-submitting sign clip (${bufferedSignFramesRef.current} frames, pause detected)`);
-            setIsProcessing(true);
-            sendEndTurn();
-          } else {
-            // Not enough frames — just reset
-            setBufferedSignFrames(0);
-          }
-        }, AUTO_SUBMIT_PAUSE_MS);
+        setBufferedSignFrames((count) => Math.min(count + 1, MAX_SIGN_FRAMES));
 
         if (frameCountRef.current % 5 === 1) {
           addLog(`Frame sent (${Math.round(frameData.length * 0.75 / 1024)}KB)`, 'frame');
@@ -216,13 +274,13 @@ export function App() {
         sendVideoFrame(frameData);
       }
     },
-    [currentMode, isProcessing, sendVideoFrame, sendEndTurn, setIsProcessing, addLog]
+    [MAX_SIGN_FRAMES, currentMode, isProcessing, sendVideoFrame, addLog]
   );
 
   useEffect(() => {
     return () => {
-      if (bufferResetTimerRef.current) {
-        clearTimeout(bufferResetTimerRef.current);
+      if (handsDownTimerRef.current) {
+        clearTimeout(handsDownTimerRef.current);
       }
     };
   }, []);
@@ -295,6 +353,7 @@ export function App() {
             <CameraView
               onFrame={handleFrame}
               onDiagnostic={addLog}
+              onDetectionStateChange={handleDetectionStateChange}
               isActive={isStarted}
               isProcessing={isProcessing && currentMode === 'signing'}
               showLandmarks={showLandmarks}
@@ -318,9 +377,15 @@ export function App() {
             <>
               {bufferedSignFrames > 0 && !isProcessing && (
                 <span className="sign-buffer-status" aria-live="polite">
-                  {bufferedSignFrames >= MIN_SIGN_FRAMES
-                    ? 'Pause to auto-interpret...'
-                    : `Signing ${bufferedSignFrames}/${MIN_SIGN_FRAMES}`}
+                  {settings.handsDownSegmentation
+                    ? handsVisible
+                      ? `Phrase capture ${bufferedSignFrames}/${MIN_SIGN_FRAMES} • keep signing`
+                      : bufferedSignFrames >= MIN_SIGN_FRAMES
+                        ? 'Hands down detected • finalizing phrase...'
+                        : `Phrase capture ${bufferedSignFrames}/${MIN_SIGN_FRAMES}`
+                    : bufferedSignFrames >= MIN_SIGN_FRAMES
+                      ? 'Pause to auto-interpret...'
+                      : `Signing ${bufferedSignFrames}/${MIN_SIGN_FRAMES}`}
                 </span>
               )}
               {isProcessing && (
@@ -384,7 +449,7 @@ export function App() {
       {messages.length === 0 && isStarted && !isProcessing && (
         <div className="onboarding-tip" aria-live="polite">
           <p>
-            Sign to the camera — interpretation happens automatically when you pause.
+            Sign to the camera — keep your hands up for the full phrase, then lower them to finalize.
             Or switch to Listen Mode for speech-to-text.
           </p>
         </div>

@@ -189,11 +189,11 @@ async def conversation_websocket(websocket: WebSocket):
                 frame_data = base64.b64decode(message["data"])
                 async with frame_lock:
                     frame_buffer.append(frame_data)
-                    # Keep at most 24 recent frames (~3s at 8 FPS)
-                    if len(frame_buffer) > 24:
+                    # Keep a longer rolling phrase clip for hands-up sentence capture
+                    if len(frame_buffer) > 48:
                         frame_buffer.pop(0)
                     buffered_frames = len(frame_buffer)
-                if buffered_frames in (1, 4, 8, 12, 16, 24):
+                if buffered_frames in (1, 4, 8, 12, 16, 24, 32, 40, 48):
                     await websocket.send_json({
                         "type": "debug",
                         "message": f"Buffered sign frames: {buffered_frames}",

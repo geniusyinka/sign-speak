@@ -9,6 +9,7 @@ const DEFAULT_SETTINGS: UserSettings = {
   highContrast: false,
   showHistory: true,
   autoHideCamera: false,
+  handsDownSegmentation: true,
 };
 
 export function loadSettings(): UserSettings {
