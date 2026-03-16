@@ -22,6 +22,7 @@ export interface UserSettings {
   highContrast: boolean;
   showHistory: boolean;
   autoHideCamera: boolean;
+  handsDownSegmentation: boolean;
 }
 
 export type WSMessageType =
@@ -51,6 +52,13 @@ export interface CameraStatus {
   hasPermission: boolean;
   brightness: 'too_dark' | 'good' | 'too_bright';
   framing: 'good' | 'hands_not_visible' | 'too_close' | 'too_far';
+}
+
+export interface SignDetectionState {
+  handsVisible: boolean;
+  hasMotion: boolean;
+  handCount: number;
+  framing: CameraStatus['framing'];
 }
 
 export interface AppState {

@@ -100,6 +100,14 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
             />
             Auto-hide camera when speech detected
           </label>
+          <label className="settings-panel__toggle">
+            <input
+              type="checkbox"
+              checked={settings.handsDownSegmentation}
+              onChange={(e) => updateSettings({ handsDownSegmentation: e.target.checked })}
+            />
+            Finish signing only when hands leave frame
+          </label>
         </div>
       </div>
     </div>

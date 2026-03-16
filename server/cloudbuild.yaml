@@ -21,6 +21,13 @@ steps:
       - '--platform'
       - 'managed'
       - '--allow-unauthenticated'
+      - '--set-secrets'
+      - 'GEMINI_API_KEY=gemini-api-key:latest'
+      - '--set-env-vars'
+      - 'GOOGLE_CLOUD_PROJECT=$PROJECT_ID,ENVIRONMENT=production,ALLOWED_ORIGINS=${_ALLOWED_ORIGINS}'
+
+substitutions:
+  _ALLOWED_ORIGINS: 'http://localhost:3000'
 
 images:
   - 'gcr.io/$PROJECT_ID/signspeak-backend'
