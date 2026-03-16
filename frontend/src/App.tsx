@@ -45,6 +45,7 @@ export function App() {
   const [translationSuccess, setTranslationSuccess] = useState(false);
   const [handsVisible, setHandsVisible] = useState(false);
   const [lastAudioActivityAt, setLastAudioActivityAt] = useState<number | null>(null);
+  const [manualListeningActive, setManualListeningActive] = useState(false);
   const [debugEntries, setDebugEntries] = useState<LogEntry[]>([]);
   const [roomCodeInput, setRoomCodeInput] = useState('');
   const [participantNameInput, setParticipantNameInput] = useState('');
@@ -104,7 +105,7 @@ export function App() {
   const listenStatus =
     currentMode !== 'listening'
       ? null
-      : !settings.continuousListening && !isMicCapturing
+      : !settings.continuousListening && !manualListeningActive && !isMicCapturing
         ? {
             label: 'Tap Start Listening when you want to record speech.',
             tone: 'muted' as const,
@@ -342,6 +343,7 @@ export function App() {
     setBufferedSignFrames(0);
     setHandsVisible(false);
     setLastAudioActivityAt(null);
+    setManualListeningActive(false);
     signSessionActiveRef.current = false;
     setActiveRoom(null);
     setRoomParticipants([]);
@@ -352,11 +354,13 @@ export function App() {
 
   const handleToggleListeningCapture = useCallback(async () => {
     if (isMicCapturing) {
+      setManualListeningActive(false);
       stopMic();
       setLastAudioActivityAt(null);
       sendEndTurn();
       return;
     }
+    setManualListeningActive(true);
     await startMic();
   }, [isMicCapturing, sendEndTurn, startMic, stopMic]);
 
@@ -376,12 +380,15 @@ export function App() {
       if (mode === 'listening') {
         setLastAudioActivityAt(null);
         if (settings.continuousListening) {
+          setManualListeningActive(false);
           startMic();
         } else {
+          setManualListeningActive(false);
           stopMic();
         }
       } else {
         setLastAudioActivityAt(null);
+        setManualListeningActive(false);
         stopMic();
       }
     },
@@ -495,16 +502,19 @@ export function App() {
   useEffect(() => {
     if (currentMode !== 'listening') return;
     if (settings.continuousListening) {
+      if (manualListeningActive) {
+        setManualListeningActive(false);
+      }
       if (!isMicCapturing) {
         startMic();
       }
       return;
     }
-    if (isMicCapturing) {
+    if (!manualListeningActive && isMicCapturing) {
       stopMic();
       setLastAudioActivityAt(null);
     }
-  }, [currentMode, isMicCapturing, settings.continuousListening, startMic, stopMic]);
+  }, [currentMode, isMicCapturing, manualListeningActive, settings.continuousListening, startMic, stopMic]);
 
   // Landing page
   if (!isStarted) {
