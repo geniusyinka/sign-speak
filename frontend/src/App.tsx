@@ -41,7 +41,7 @@ export function App() {
     });
   }, []);
 
-  const { settings } = useSettings();
+  const { settings, updateSettings } = useSettings();
   const {
     messages,
     addMessage,
@@ -393,6 +393,14 @@ export function App() {
                   Interpreting...
                 </span>
               )}
+              <label className="visible-setting-toggle">
+                <input
+                  type="checkbox"
+                  checked={settings.handsDownSegmentation}
+                  onChange={(e) => updateSettings({ handsDownSegmentation: e.target.checked })}
+                />
+                <span>Finish on hands down</span>
+              </label>
             </>
           )}
           <MuteButton isMuted={isMuted} onToggle={toggleMute} />

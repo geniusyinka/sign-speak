@@ -912,6 +912,31 @@ body {
   gap: var(--space-sm);
 }
 
+.visible-setting-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 0 var(--space-md);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.visible-setting-toggle input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+
+.visible-setting-toggle span {
+  line-height: 1;
+}
+
 .sign-buffer-status {
   min-width: 110px;
   font-size: 0.8rem;
@@ -1386,6 +1411,11 @@ body {
     gap: var(--space-sm);
     justify-content: center;
     padding: var(--space-sm) var(--space-md);
+  }
+
+  .visible-setting-toggle {
+    padding: 0 var(--space-sm);
+    font-size: 0.8rem;
   }
 
   .app-header {
