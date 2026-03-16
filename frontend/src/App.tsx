@@ -44,6 +44,7 @@ export function App() {
   const [showDebugLog, setShowDebugLog] = useState(false);
   const [translationSuccess, setTranslationSuccess] = useState(false);
   const [handsVisible, setHandsVisible] = useState(false);
+  const [lastAudioActivityAt, setLastAudioActivityAt] = useState<number | null>(null);
   const [debugEntries, setDebugEntries] = useState<LogEntry[]>([]);
   const [roomCodeInput, setRoomCodeInput] = useState('');
   const [participantNameInput, setParticipantNameInput] = useState('');
@@ -79,12 +80,18 @@ export function App() {
 
   const handleAudioChunk = useCallback(
     (data: string) => {
+      setLastAudioActivityAt(Date.now());
       sendAudioChunk(data);
     },
     [sendAudioChunk]
   );
 
-  const { startCapture: startMic, stopCapture: stopMic } = useMicrophone(handleAudioChunk);
+  const {
+    isCapturing: isMicCapturing,
+    hasPermission: hasMicPermission,
+    startCapture: startMic,
+    stopCapture: stopMic,
+  } = useMicrophone(handleAudioChunk);
   const canInterpretSign =
     connectionStatus === 'connected' && !isProcessing && bufferedSignFrames >= MIN_SIGN_FRAMES;
   const roomInviteUrl = activeRoom
@@ -93,6 +100,39 @@ export function App() {
 
   // Track pending translation text for browser TTS fallback
   const pendingTTSRef = useRef<{ text: string; timer: ReturnType<typeof setTimeout> } | null>(null);
+  const isAudioRecentlyActive = lastAudioActivityAt !== null && Date.now() - lastAudioActivityAt < 1400;
+  const listenStatus =
+    currentMode !== 'listening'
+      ? null
+      : !settings.continuousListening && !isMicCapturing
+        ? {
+            label: 'Tap Start Listening when you want to record speech.',
+            tone: 'muted' as const,
+          }
+        : isProcessing
+        ? {
+            label: 'Transcribing speech...',
+            tone: 'processing' as const,
+          }
+        : isAudioRecentlyActive
+          ? {
+              label: 'Speech detected. Keep talking...',
+              tone: 'active' as const,
+            }
+          : isMicCapturing
+            ? {
+                label: 'Microphone live. Start speaking.',
+                tone: 'ready' as const,
+              }
+            : hasMicPermission === false
+              ? {
+                  label: 'Microphone permission is required for Listen Mode.',
+                  tone: 'error' as const,
+                }
+              : {
+                  label: 'Starting microphone...',
+                  tone: 'muted' as const,
+                };
 
   useEffect(() => {
     activeRoomRef.current = activeRoom;
@@ -133,6 +173,7 @@ export function App() {
               confidence: msg.confidence,
               participantId: msg.participantId,
               participantName: msg.participantName,
+              gloss: msg.gloss,
             });
 
             // In signing mode, speak the translation aloud for the hearing person.
@@ -154,6 +195,9 @@ export function App() {
               }, 300);
               pendingTTSRef.current = { text: msg.text, timer };
             }
+            if (source === 'spoken') {
+              setLastAudioActivityAt(null);
+            }
           }
           break;
         case 'audio':
@@ -173,6 +217,9 @@ export function App() {
             setIsProcessing(false);
             setBufferedSignFrames(0);
             signSessionActiveRef.current = false;
+            if (currentMode === 'listening') {
+              setLastAudioActivityAt(null);
+            }
           }
           break;
         case 'room_state':
@@ -294,6 +341,7 @@ export function App() {
     }
     setBufferedSignFrames(0);
     setHandsVisible(false);
+    setLastAudioActivityAt(null);
     signSessionActiveRef.current = false;
     setActiveRoom(null);
     setRoomParticipants([]);
@@ -301,6 +349,16 @@ export function App() {
     updateRoomUrl(null);
     setCurrentMode('idle');
   }, [clearMessages, disconnect, stopMic, setCurrentMode, updateRoomUrl]);
+
+  const handleToggleListeningCapture = useCallback(async () => {
+    if (isMicCapturing) {
+      stopMic();
+      setLastAudioActivityAt(null);
+      sendEndTurn();
+      return;
+    }
+    await startMic();
+  }, [isMicCapturing, sendEndTurn, startMic, stopMic]);
 
   const handleModeChange = useCallback(
     (mode: 'signing' | 'listening' | 'idle') => {
@@ -316,12 +374,18 @@ export function App() {
       }
 
       if (mode === 'listening') {
-        startMic();
+        setLastAudioActivityAt(null);
+        if (settings.continuousListening) {
+          startMic();
+        } else {
+          stopMic();
+        }
       } else {
+        setLastAudioActivityAt(null);
         stopMic();
       }
     },
-    [currentMode, sendEndTurn, setCurrentMode, startMic, stopMic]
+    [currentMode, sendEndTurn, setCurrentMode, settings.continuousListening, startMic, stopMic]
   );
 
   const handleInterpretSign = useCallback(() => {
@@ -427,6 +491,20 @@ export function App() {
       addLog(`Sign buffer ready (${MIN_SIGN_FRAMES} frames)`);
     }
   }, [bufferedSignFrames, currentMode, addLog, MIN_SIGN_FRAMES]);
+
+  useEffect(() => {
+    if (currentMode !== 'listening') return;
+    if (settings.continuousListening) {
+      if (!isMicCapturing) {
+        startMic();
+      }
+      return;
+    }
+    if (isMicCapturing) {
+      stopMic();
+      setLastAudioActivityAt(null);
+    }
+  }, [currentMode, isMicCapturing, settings.continuousListening, startMic, stopMic]);
 
   // Landing page
   if (!isStarted) {
@@ -642,6 +720,15 @@ export function App() {
             </svg>
           </button>
           <MuteButton isMuted={isMuted} onToggle={toggleMute} />
+          {currentMode === 'listening' && (
+            <Button
+              variant={isMicCapturing ? 'secondary' : 'primary'}
+              size="sm"
+              onClick={handleToggleListeningCapture}
+            >
+              {isMicCapturing ? 'Stop Listening' : 'Start Listening'}
+            </Button>
+          )}
           {currentMode === 'signing' && (
             <Button
               variant="ghost"
@@ -658,6 +745,16 @@ export function App() {
           </Button>
         </div>
       </footer>
+
+      {listenStatus && (
+        <div
+          className={`listen-status listen-status--${listenStatus.tone}`}
+          aria-live="polite"
+        >
+          <span className="listen-status__dot" />
+          <span>{listenStatus.label}</span>
+        </div>
+      )}
 
       <SettingsPanel isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
 

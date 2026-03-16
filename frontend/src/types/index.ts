@@ -7,6 +7,7 @@ export interface ConversationMessage {
   confidence?: number;
   participantId?: string;
   participantName?: string;
+  gloss?: string;
 }
 
 export interface ConversationSession {
@@ -25,6 +26,8 @@ export interface UserSettings {
   showHistory: boolean;
   autoHideCamera: boolean;
   handsDownSegmentation: boolean;
+  showAslGloss: boolean;
+  continuousListening: boolean;
 }
 
 export type WSMessageType =
@@ -53,6 +56,7 @@ export interface WSMessage {
   participantName?: string;
   participantCount?: number;
   participants?: RoomParticipant[];
+  gloss?: string;
 }
 
 export interface RoomConnectionOptions {

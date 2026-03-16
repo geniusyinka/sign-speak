@@ -108,6 +108,22 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
             />
             Finish signing only when hands leave frame
           </label>
+          <label className="settings-panel__toggle">
+            <input
+              type="checkbox"
+              checked={settings.showAslGloss}
+              onChange={(e) => updateSettings({ showAslGloss: e.target.checked })}
+            />
+            Show ASL gloss for spoken input
+          </label>
+          <label className="settings-panel__toggle">
+            <input
+              type="checkbox"
+              checked={settings.continuousListening}
+              onChange={(e) => updateSettings({ continuousListening: e.target.checked })}
+            />
+            Keep Listen Mode microphone always on
+          </label>
         </div>
       </div>
     </div>

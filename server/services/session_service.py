@@ -36,6 +36,7 @@ class SessionService:
         text: str,
         speaker: str,
         confidence: Optional[float] = None,
+        gloss: Optional[str] = None,
     ) -> None:
         """Add a message to a session's conversation history."""
         session = self._sessions.get(session_id)
@@ -49,6 +50,7 @@ class SessionService:
             text=text,
             speaker=speaker,
             confidence=confidence,
+            gloss=gloss,
         )
         session.conversation_history.append(message)
 

@@ -10,6 +10,8 @@ const DEFAULT_SETTINGS: UserSettings = {
   showHistory: true,
   autoHideCamera: false,
   handsDownSegmentation: true,
+  showAslGloss: true,
+  continuousListening: false,
 };
 
 export function loadSettings(): UserSettings {

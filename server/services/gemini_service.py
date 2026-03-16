@@ -23,6 +23,14 @@ VISION_MODEL = "gemini-2.5-flash"
 # Live model for real-time audio streaming (speech-to-text)
 LIVE_MODEL = "gemini-2.5-flash-native-audio-preview-12-2025"
 
+ASL_GLOSS_PROMPT = (
+    "Convert the spoken English into concise ASL gloss. "
+    "Return ONLY the gloss, in uppercase, using short ASL-style tokens. "
+    "Do not explain. Do not include punctuation except Q for questions when useful. "
+    "Prefer compact output like 'YOU HELP ME Q' or 'ME GO STORE NOW'. "
+    "If the speech is too unclear to map confidently, return [skip]."
+)
+
 
 class GeminiService:
     """Hybrid Gemini service:
@@ -179,6 +187,33 @@ class GeminiService:
             ),
         )
         return response.text or ""
+
+    async def spoken_text_to_asl_gloss(
+        self, text: str, conversation_history: list[dict] | None = None
+    ) -> str:
+        prompt = ASL_GLOSS_PROMPT
+        if conversation_history:
+            history_text = "\n".join(
+                [f"- {m['speaker']}: {m['text']}" for m in conversation_history[-8:]]
+            )
+            prompt += f"\n\nCONVERSATION SO FAR:\n{history_text}"
+
+        content = types.Content(
+            parts=[
+                types.Part(text=f"{prompt}\n\nSPOKEN ENGLISH:\n{text}"),
+            ],
+            role="user",
+        )
+
+        response = await self.client.aio.models.generate_content(
+            model=VISION_MODEL,
+            contents=[content],
+            config=types.GenerateContentConfig(
+                thinking_config=types.ThinkingConfig(thinking_budget=0),
+                temperature=0.1,
+            ),
+        )
+        return (response.text or "").strip()
 
     # ── Live API (real-time audio streaming) ──────────────────────
 

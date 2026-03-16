@@ -14,6 +14,7 @@ export function TranscriptPanel() {
   }, [messages, isProcessing]);
 
   const textSizeClass = `transcript--${settings.textSize}`;
+  const latestSpokenGloss = [...messages].reverse().find((message) => message.type === 'spoken' && message.gloss)?.gloss;
 
   if (!settings.showHistory && messages.length > 0) {
     const lastMessage = messages[messages.length - 1];
@@ -21,6 +22,12 @@ export function TranscriptPanel() {
       <div className={`transcript transcript--large-display ${textSizeClass}`}>
         <div className="transcript__large-text">
           <p>{lastMessage.text}</p>
+          {settings.showAslGloss && lastMessage.type === 'spoken' && latestSpokenGloss && (
+            <div className="transcript__gloss-panel">
+              <span className="transcript__gloss-label">ASL gloss</span>
+              <p>{latestSpokenGloss}</p>
+            </div>
+          )}
         </div>
         {isProcessing && <TypingIndicator mode={currentMode} />}
       </div>

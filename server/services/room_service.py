@@ -83,6 +83,7 @@ class RoomService:
         participant_id: str,
         participant_name: str,
         confidence: float | None = None,
+        gloss: str | None = None,
     ) -> None:
         room = self._rooms.get(room_id)
         if not room:
@@ -97,6 +98,7 @@ class RoomService:
             confidence=confidence,
             participant_id=participant_id,
             participant_name=participant_name,
+            gloss=gloss,
         )
         room.conversation_history.append(message)
 

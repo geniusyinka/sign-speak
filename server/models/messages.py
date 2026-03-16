@@ -23,6 +23,7 @@ class WSMessage(BaseModel):
     participant_id: Optional[str] = None
     participant_name: Optional[str] = None
     participant_count: Optional[int] = None
+    gloss: Optional[str] = None
 
 
 class ConversationMessage(BaseModel):
@@ -34,3 +35,4 @@ class ConversationMessage(BaseModel):
     confidence: Optional[float] = None
     participant_id: Optional[str] = None
     participant_name: Optional[str] = None
+    gloss: Optional[str] = None

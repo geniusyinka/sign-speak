@@ -1,5 +1,8 @@
 import { encodeAudioChunk } from '../utils/audioEncoder.ts';
 
+const MIN_SPEECH_RMS = 0.012;
+const SPEECH_HOLD_FRAMES = 4;
+
 export class AudioService {
   private audioContext: AudioContext | null = null;
   private mediaStream: MediaStream | null = null;
@@ -7,6 +10,7 @@ export class AudioService {
   private source: MediaStreamAudioSourceNode | null = null;
   private sink: GainNode | null = null;
   private onChunk: ((data: string) => void) | null = null;
+  private speechHoldFrames = 0;
 
   async startCapture(onAudioChunk: (base64Data: string) => void): Promise<void> {
     if (this.audioContext?.state === 'closed') {
@@ -31,6 +35,15 @@ export class AudioService {
     this.processor = this.audioContext.createScriptProcessor(4096, 1, 1);
     this.processor.onaudioprocess = (event) => {
       const inputData = event.inputBuffer.getChannelData(0);
+      const rms = calculateRms(inputData);
+      if (rms >= MIN_SPEECH_RMS) {
+        this.speechHoldFrames = SPEECH_HOLD_FRAMES;
+      } else if (this.speechHoldFrames > 0) {
+        this.speechHoldFrames -= 1;
+      }
+      if (this.speechHoldFrames <= 0) {
+        return;
+      }
       const encoded = encodeAudioChunk(inputData, event.inputBuffer.sampleRate);
       this.onChunk?.(encoded);
     };
@@ -50,6 +63,7 @@ export class AudioService {
     this.sink = null;
     this.mediaStream = null;
     this.onChunk = null;
+    this.speechHoldFrames = 0;
   }
 
   getAudioContext(): AudioContext {
@@ -66,4 +80,12 @@ export class AudioService {
       this.audioContext = null;
     }
   }
+}
+
+function calculateRms(audioData: Float32Array): number {
+  let total = 0;
+  for (let i = 0; i < audioData.length; i += 1) {
+    total += audioData[i] * audioData[i];
+  }
+  return Math.sqrt(total / audioData.length);
 }

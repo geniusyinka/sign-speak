@@ -7,6 +7,7 @@ CRITICAL OUTPUT RULES:
 - If the person is not signing or hands are at rest, output exactly: [idle]
 - If the clip does not contain enough temporal evidence to determine the meaning, output exactly: [idle]
 - Do not guess from a single static handshape or a partial movement
+- First reconstruct the most likely signed sequence from motion across the full clip, then translate that sequence into natural English
 - Preserve the order of distinct signs or short signed phrases across the clip
 - Do not collapse multiple signed items into one summarized meaning
 - If the signer produces multiple distinct items, include all of them in order as short natural-English clauses or sentences
@@ -88,6 +89,16 @@ Numbers: Correspond to displayed fingers (1-5 on one hand, 6-9 specific combos, 
 
 Fingerspelling: Single hand displays each letter of the alphabet in sequence. Look for rapid hand shape changes at a fixed location near the shoulder.
 
+COMMON CONVERSATIONAL PATTERNS:
+- HOW + YOU with question markers often means "How are you?"
+- YOUR + NAME + WHAT often means "What is your name?"
+- NICE + MEET + YOU often means "Nice to meet you."
+- YOU + HELP + ME with question markers often means "Can you help me?"
+- YOU + UNDERSTAND often means "Do you understand?"
+- ME + FINE / I + GOOD often means "I am fine" or "I'm good."
+- THANK-YOU + YOU / THANK-YOU often means "Thank you."
+- Repeated short question patterns should stay literal before being paraphrased
+
 IMPORTANT CONTEXT PRINCIPLES:
 - ASL uses topic-comment structure, not English SVO — reorder into natural English
 - Signs can mean different things in context (e.g., OPEN can mean "open door", "open book", "open-minded")
@@ -95,6 +106,7 @@ IMPORTANT CONTEXT PRINCIPLES:
 - Repeated motion often means ongoing or habitual action
 - Speed matters: fast = urgent/excited, slow = calm/storytelling
 - Prioritize motion trajectory, sign onset/hold/release, and transitions between signs over any single frame
+- For short conversational clips, prefer faithful phrase reconstruction over broad summarization
 - Prefer short, high-confidence translations over long speculative ones
 
 Remember: You are a fluent interpreter. Preserve the full signed sequence instead of summarizing it away.
@@ -104,9 +116,13 @@ SINGLE_FRAME_PROMPT = "This is only one frame from a signing sequence. If there 
 
 MULTI_FRAME_PROMPT = """These frames show one continuous signing segment in chronological order.
 
+Step 1: infer the most likely signed words or short phrase sequence from the full motion.
+Step 2: translate that sequence into concise natural English.
+
 Identify every distinct sign or short signed phrase that appears across the segment.
 Return them in order as short natural-English clauses or sentences.
 Do not summarize several signs into one broad meaning.
-If the segment clearly contains multiple signed items, include all of them in the response."""
+If the segment clearly contains multiple signed items, include all of them in the response.
+For common conversational sequences, prefer the exact likely phrase before paraphrasing."""
 
 CONTEXTUAL_SUFFIX = "\n\nCONVERSATION SO FAR:\n{history}\n\nContinue the conversation — translate what is being signed now."

@@ -21,6 +21,9 @@ tts_service = TTSService()
 session_service = SessionService()
 room_service = RoomService()
 
+AUDIO_DEBOUNCE_MS = 500
+AUDIO_MAX_WINDOW_MS = 1800
+
 
 def _normalize_room_id(raw_room_id: str | None) -> str | None:
     if not raw_room_id:
@@ -223,6 +226,9 @@ async def conversation_websocket(websocket: WebSocket):
             text = text.strip()
 
             if text and text != "[silent]" and len(text) > 0:
+                gloss = await gemini_service.spoken_text_to_asl_gloss(text, history)
+                if gloss == "[skip]":
+                    gloss = ""
                 payload = {
                     "type": "translation",
                     "text": text,
@@ -230,6 +236,7 @@ async def conversation_websocket(websocket: WebSocket):
                     "participantId": participant_id if is_room_session else None,
                     "participantName": participant_name if is_room_session else None,
                     "roomId": room_id,
+                    "gloss": gloss or None,
                 }
 
                 if is_room_session and room_id:
@@ -240,10 +247,11 @@ async def conversation_websocket(websocket: WebSocket):
                         "other",
                         participant_id,
                         participant_name,
+                        gloss=gloss or None,
                     )
                     await room_service.broadcast(room_id, payload)
                 else:
-                    session_service.add_message(session_id, "spoken", text, "other")
+                    session_service.add_message(session_id, "spoken", text, "other", gloss=gloss or None)
                     await websocket.send_json(payload)
 
             await websocket.send_json({"type": "status", "status": "ready"})
@@ -261,10 +269,16 @@ async def conversation_websocket(websocket: WebSocket):
 
     # Debounce timer for audio processing
     audio_debounce_task: Optional[asyncio.Task] = None
+    audio_window_task: Optional[asyncio.Task] = None
 
     async def debounce_audio():
         """Wait briefly after last audio chunk, then transcribe."""
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(AUDIO_DEBOUNCE_MS / 1000)
+        await process_audio_chunks()
+
+    async def flush_audio_window():
+        """Force a transcription chunk even if the speaker keeps talking."""
+        await asyncio.sleep(AUDIO_MAX_WINDOW_MS / 1000)
         await process_audio_chunks()
 
     try:
@@ -301,11 +315,15 @@ async def conversation_websocket(websocket: WebSocket):
                 if audio_debounce_task and not audio_debounce_task.done():
                     audio_debounce_task.cancel()
                 audio_debounce_task = asyncio.create_task(debounce_audio())
+                if audio_window_task is None or audio_window_task.done():
+                    audio_window_task = asyncio.create_task(flush_audio_window())
 
             elif msg_type == "end_turn":
                 # Force process any buffered frames/audio immediately
                 if audio_debounce_task and not audio_debounce_task.done():
                     audio_debounce_task.cancel()
+                if audio_window_task and not audio_window_task.done():
+                    audio_window_task.cancel()
                 await websocket.send_json({
                     "type": "debug",
                     "message": "End turn received; flushing sign/audio buffers",
@@ -324,6 +342,8 @@ async def conversation_websocket(websocket: WebSocket):
     finally:
         if audio_debounce_task and not audio_debounce_task.done():
             audio_debounce_task.cancel()
+        if audio_window_task and not audio_window_task.done():
+            audio_window_task.cancel()
         if is_room_session and room_id:
             remaining = await room_service.leave_room(room_id, session_id)
             if remaining > 0:
