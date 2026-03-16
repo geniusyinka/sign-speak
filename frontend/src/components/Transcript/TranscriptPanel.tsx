@@ -39,9 +39,9 @@ export function TranscriptPanel() {
       <div className="transcript__messages">
         {messages.length === 0 && (
           <div className="transcript__empty">
-            <p>Your conversation will appear here</p>
+            <p>Your live transcript will appear here</p>
             <p className="transcript__empty-hint">
-              Sign to the camera or speak to start
+              Use Sign or Speak mode to test translations
             </p>
           </div>
         )}
