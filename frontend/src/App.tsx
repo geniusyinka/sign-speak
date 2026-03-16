@@ -41,7 +41,7 @@ export function App() {
     });
   }, []);
 
-  const { settings, updateSettings } = useSettings();
+  const { settings } = useSettings();
   const {
     messages,
     addMessage,
@@ -393,16 +393,21 @@ export function App() {
                   Interpreting...
                 </span>
               )}
-              <label className="visible-setting-toggle">
-                <input
-                  type="checkbox"
-                  checked={settings.handsDownSegmentation}
-                  onChange={(e) => updateSettings({ handsDownSegmentation: e.target.checked })}
-                />
-                <span>Finish on hands down</span>
-              </label>
             </>
           )}
+          <button
+            className={`landmark-toggle ${showLandmarks ? 'landmark-toggle--active' : ''}`}
+            onClick={() => setShowLandmarks((v) => !v)}
+            aria-label={showLandmarks ? 'Hide hand detection' : 'Show hand detection'}
+            title={showLandmarks ? 'Hide hand detection' : 'Show hand detection'}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M18 11V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2" />
+              <path d="M14 10V4a2 2 0 0 0-2-2a2 2 0 0 0-2 2v6" />
+              <path d="M10 10.5V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2v8" />
+              <path d="M18 8a2 2 0 0 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 13" />
+            </svg>
+          </button>
           <MuteButton isMuted={isMuted} onToggle={toggleMute} />
           <MoreMenu>
             {currentMode === 'signing' && (
@@ -416,19 +421,6 @@ export function App() {
                 Interpret Now
               </Button>
             )}
-            <button
-              className={`landmark-toggle ${showLandmarks ? 'landmark-toggle--active' : ''}`}
-              onClick={() => setShowLandmarks((v) => !v)}
-              aria-label={showLandmarks ? 'Hide hand detection' : 'Show hand detection'}
-              title={showLandmarks ? 'Hide hand detection' : 'Show hand detection'}
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M18 11V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2" />
-                <path d="M14 10V4a2 2 0 0 0-2-2a2 2 0 0 0-2 2v6" />
-                <path d="M10 10.5V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2v8" />
-                <path d="M18 8a2 2 0 0 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 13" />
-              </svg>
-            </button>
             <Button variant="ghost" onClick={() => setSettingsOpen(true)} aria-label="Open settings">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
