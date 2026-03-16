@@ -4,9 +4,11 @@ import asyncio
 import base64
 import logging
 import time
+import uuid
 from typing import Optional
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from services.gemini_service import GeminiService
+from services.room_service import RoomService
 from services.tts_service import TTSService
 from services.session_service import SessionService
 
@@ -17,6 +19,26 @@ router = APIRouter()
 gemini_service = GeminiService()
 tts_service = TTSService()
 session_service = SessionService()
+room_service = RoomService()
+
+
+def _normalize_room_id(raw_room_id: str | None) -> str | None:
+    if not raw_room_id:
+        return None
+    room_id = "".join(ch for ch in raw_room_id.upper() if ch.isalnum())[:8]
+    return room_id or None
+
+
+async def _send_room_state(room_id: str) -> None:
+    await room_service.broadcast(
+        room_id,
+        {
+            "type": "room_state",
+            "roomId": room_id,
+            "participantCount": room_service.get_participant_count(room_id),
+            "participants": room_service.get_participants(room_id),
+        },
+    )
 
 
 @router.websocket("/ws/conversation")
@@ -24,8 +46,31 @@ async def conversation_websocket(websocket: WebSocket):
     await websocket.accept()
     logger.info("WebSocket connection accepted")
 
-    session_data = session_service.create_session()
-    session_id = session_data.session_id
+    room_id = _normalize_room_id(websocket.query_params.get("room_id"))
+    participant_id = websocket.query_params.get("participant_id") or str(uuid.uuid4())
+    participant_name = (websocket.query_params.get("participant_name") or "Guest").strip()[:40] or "Guest"
+    is_room_session = room_id is not None
+
+    if is_room_session:
+        participant = await room_service.join_room(
+            room_id=room_id,
+            participant_id=participant_id,
+            participant_name=participant_name,
+            websocket=websocket,
+        )
+        session_id = participant.connection_id
+        await websocket.send_json({
+            "type": "room_state",
+            "roomId": room_id,
+            "participantId": participant_id,
+            "participantName": participant_name,
+            "participantCount": room_service.get_participant_count(room_id),
+            "participants": room_service.get_participants(room_id),
+        })
+        await _send_room_state(room_id)
+    else:
+        session_data = session_service.create_session()
+        session_id = session_data.session_id
 
     await websocket.send_json({"type": "status", "status": "ready"})
 
@@ -56,12 +101,15 @@ async def conversation_websocket(websocket: WebSocket):
             started_at = time.perf_counter()
 
             await websocket.send_json({"type": "status", "status": "processing"})
+            if is_room_session and room_id:
+                room_service.set_activity(room_id, session_id, "processing")
+                await _send_room_state(room_id)
             await websocket.send_json({
                 "type": "debug",
                 "message": f"Processing {len(frames)} frame(s)...",
             })
 
-            history = session_service.get_history(session_id)
+            history = room_service.get_history(room_id) if is_room_session and room_id else session_service.get_history(session_id)
 
             if len(frames) < 4:
                 await websocket.send_json({
@@ -88,16 +136,31 @@ async def conversation_websocket(websocket: WebSocket):
             })
 
             if text and text not in ("[unclear]", "[idle]") and len(text) > 0:
-                session_service.add_message(session_id, "signed", text, "user")
-
-                await websocket.send_json({
+                payload = {
                     "type": "translation",
                     "text": text,
                     "source": "signed",
-                })
+                    "participantId": participant_id if is_room_session else None,
+                    "participantName": participant_name if is_room_session else None,
+                    "roomId": room_id,
+                }
+
+                if is_room_session and room_id:
+                    room_service.add_message(
+                        room_id,
+                        "signed",
+                        text,
+                        "user",
+                        participant_id,
+                        participant_name,
+                    )
+                    await room_service.broadcast(room_id, payload)
+                else:
+                    session_service.add_message(session_id, "signed", text, "user")
+                    await websocket.send_json(payload)
 
                 # Generate TTS audio
-                if tts_service.is_available():
+                if not is_room_session and tts_service.is_available():
                     try:
                         audio_data = await tts_service.synthesize(text)
                         if audio_data:
@@ -114,6 +177,9 @@ async def conversation_websocket(websocket: WebSocket):
                         })
 
             await websocket.send_json({"type": "status", "status": "ready"})
+            if is_room_session and room_id:
+                room_service.set_activity(room_id, session_id, "idle")
+                await _send_room_state(room_id)
         except Exception as e:
             logger.error(f"Sign recognition error: {e}")
             await websocket.send_json({
@@ -148,21 +214,42 @@ async def conversation_websocket(websocket: WebSocket):
                 return
 
             await websocket.send_json({"type": "status", "status": "processing"})
+            if is_room_session and room_id:
+                room_service.set_activity(room_id, session_id, "processing")
+                await _send_room_state(room_id)
 
-            history = session_service.get_history(session_id)
+            history = room_service.get_history(room_id) if is_room_session and room_id else session_service.get_history(session_id)
             text = await gemini_service.transcribe_audio(combined, history)
             text = text.strip()
 
             if text and text != "[silent]" and len(text) > 0:
-                session_service.add_message(session_id, "spoken", text, "other")
-
-                await websocket.send_json({
+                payload = {
                     "type": "translation",
                     "text": text,
                     "source": "spoken",
-                })
+                    "participantId": participant_id if is_room_session else None,
+                    "participantName": participant_name if is_room_session else None,
+                    "roomId": room_id,
+                }
+
+                if is_room_session and room_id:
+                    room_service.add_message(
+                        room_id,
+                        "spoken",
+                        text,
+                        "other",
+                        participant_id,
+                        participant_name,
+                    )
+                    await room_service.broadcast(room_id, payload)
+                else:
+                    session_service.add_message(session_id, "spoken", text, "other")
+                    await websocket.send_json(payload)
 
             await websocket.send_json({"type": "status", "status": "ready"})
+            if is_room_session and room_id:
+                room_service.set_activity(room_id, session_id, "idle")
+                await _send_room_state(room_id)
         except Exception as e:
             logger.error(f"Audio transcription error: {e}")
             await websocket.send_json({
@@ -193,6 +280,9 @@ async def conversation_websocket(websocket: WebSocket):
                     if len(frame_buffer) > 48:
                         frame_buffer.pop(0)
                     buffered_frames = len(frame_buffer)
+                if is_room_session and room_id:
+                    room_service.set_activity(room_id, session_id, "signing")
+                    await _send_room_state(room_id)
                 if buffered_frames in (1, 4, 8, 12, 16, 24, 32, 40, 48):
                     await websocket.send_json({
                         "type": "debug",
@@ -203,6 +293,9 @@ async def conversation_websocket(websocket: WebSocket):
                 audio_data = base64.b64decode(message["data"])
                 async with audio_lock:
                     audio_buffer.append(audio_data)
+                if is_room_session and room_id:
+                    room_service.set_activity(room_id, session_id, "speaking")
+                    await _send_room_state(room_id)
 
                 # Reset audio debounce timer
                 if audio_debounce_task and not audio_debounce_task.done():
@@ -231,4 +324,9 @@ async def conversation_websocket(websocket: WebSocket):
     finally:
         if audio_debounce_task and not audio_debounce_task.done():
             audio_debounce_task.cancel()
-        session_service.remove_session(session_id)
+        if is_room_session and room_id:
+            remaining = await room_service.leave_room(room_id, session_id)
+            if remaining > 0:
+                await _send_room_state(room_id)
+        else:
+            session_service.remove_session(session_id)

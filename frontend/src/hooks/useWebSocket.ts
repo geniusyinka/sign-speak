@@ -1,6 +1,6 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
 import { WebSocketService } from '../services/WebSocketService.ts';
-import type { WSMessage } from '../types/index.ts';
+import type { RoomConnectionOptions, WSMessage } from '../types/index.ts';
 
 type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
 
@@ -9,12 +9,12 @@ export function useWebSocket(url?: string) {
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('disconnected');
   const messageHandlersRef = useRef<((msg: WSMessage) => void)[]>([]);
 
-  const connect = useCallback(() => {
+  const connect = useCallback((options?: RoomConnectionOptions) => {
     if (wsService.current) {
       wsService.current.disconnect();
     }
 
-    wsService.current = new WebSocketService(url);
+    wsService.current = new WebSocketService(url, options);
 
     wsService.current.onStatus((status) => {
       setConnectionStatus(status);

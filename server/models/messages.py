@@ -8,6 +8,7 @@ class WSMessage(BaseModel):
         "video_frame",
         "audio_chunk",
         "end_turn",
+        "room_state",
         "translation",
         "audio",
         "error",
@@ -18,6 +19,10 @@ class WSMessage(BaseModel):
     error: Optional[str] = None
     confidence: Optional[float] = None
     status: Optional[Literal["ready", "processing", "error"]] = None
+    room_id: Optional[str] = None
+    participant_id: Optional[str] = None
+    participant_name: Optional[str] = None
+    participant_count: Optional[int] = None
 
 
 class ConversationMessage(BaseModel):
@@ -27,3 +32,5 @@ class ConversationMessage(BaseModel):
     text: str
     speaker: Literal["user", "other"]
     confidence: Optional[float] = None
+    participant_id: Optional[str] = None
+    participant_name: Optional[str] = None
