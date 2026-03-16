@@ -107,7 +107,7 @@ export function App() {
       ? null
       : !settings.continuousListening && !manualListeningActive && !isMicCapturing
         ? {
-            label: 'Tap Start Listening when you want to record speech.',
+            label: 'Auto capture is off. Use manual speech capture when you want to talk.',
             tone: 'muted' as const,
           }
         : isProcessing
@@ -122,16 +122,16 @@ export function App() {
             }
           : isMicCapturing
             ? {
-                label: 'Microphone live. Start speaking.',
+                label: 'Ready for speech.',
                 tone: 'ready' as const,
               }
             : hasMicPermission === false
               ? {
-                  label: 'Microphone permission is required for Listen Mode.',
+                  label: 'Microphone permission is required for Speak mode.',
                   tone: 'error' as const,
                 }
               : {
-                  label: 'Starting microphone...',
+                  label: 'Preparing microphone...',
                   tone: 'muted' as const,
                 };
 
@@ -730,13 +730,14 @@ export function App() {
             </svg>
           </button>
           <MuteButton isMuted={isMuted} onToggle={toggleMute} />
-          {currentMode === 'listening' && (
+          {currentMode === 'listening' && !settings.continuousListening && (
             <Button
-              variant={isMicCapturing ? 'secondary' : 'primary'}
+              variant={isMicCapturing ? 'secondary' : 'ghost'}
               size="sm"
               onClick={handleToggleListeningCapture}
+              title="Manual speech capture"
             >
-              {isMicCapturing ? 'Stop Listening' : 'Start Listening'}
+              {isMicCapturing ? 'Stop Speaking' : 'Manual Capture'}
             </Button>
           )}
           {currentMode === 'signing' && (
@@ -783,7 +784,7 @@ export function App() {
           <p>
             {activeRoom
               ? `Share room ${activeRoom.roomId} so someone else can join, then sign or speak to start the shared transcript.`
-              : 'Sign to the camera — keep your hands up for the full phrase, then lower them to finalize. Or switch to Listen Mode for speech-to-text.'}
+              : 'Sign to the camera — keep your hands up for the full phrase, then lower them to finalize. Or switch to Speak mode for speech-to-text.'}
           </p>
         </div>
       )}

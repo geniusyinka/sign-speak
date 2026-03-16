@@ -122,7 +122,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
               checked={settings.continuousListening}
               onChange={(e) => updateSettings({ continuousListening: e.target.checked })}
             />
-            Keep Listen Mode microphone always on
+            Auto-capture speech in Speak mode
           </label>
         </div>
       </div>
