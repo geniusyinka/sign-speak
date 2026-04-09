@@ -9,19 +9,20 @@ export function MessageBubble({ message }: MessageBubbleProps) {
   const { settings } = useSettings();
   const isUser = message.speaker === 'user';
   const typeLabel = message.type === 'signed' ? 'signed' : 'spoke';
-  const speakerLabel = message.participantName
+  const hasParticipantContext = Boolean(message.participantName);
+  const speakerLabel = hasParticipantContext
     ? isUser
       ? `You • ${message.participantName}`
       : message.participantName
-    : isUser
-      ? 'You'
-      : 'Them';
+    : message.type === 'signed'
+      ? 'Sign input'
+      : 'Speech input';
 
   return (
     <div className={`message ${isUser ? 'message--user' : 'message--other'}`}>
       <div className="message__header">
         <span className="message__speaker">
-          {speakerLabel} ({typeLabel})
+          {hasParticipantContext ? `${speakerLabel} (${typeLabel})` : speakerLabel}
         </span>
         <span className="message__time">
           {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}

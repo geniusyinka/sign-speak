@@ -129,6 +129,69 @@ gcloud builds submit --config server/cloudbuild.yaml --substitutions _ALLOWED_OR
 
 After deployment, point the frontend at the Cloud Run backend URL for WebSocket traffic by setting `VITE_WEBSOCKET_BASE_URL`.
 
+## Testing Instructions
+
+Follow these steps to test SignSpeak Live locally after completing the [Local Setup](#local-setup) above.
+
+### Prerequisites
+
+- A webcam (built-in or external)
+- A microphone
+- A Gemini API key set in `server/.env`
+- Both frontend (port 3000) and backend (port 8080) running
+
+### Test 1: Health Check
+
+```bash
+curl http://localhost:8080/health
+```
+
+You should see `{"status":"healthy","gemini_configured":true,...}`.
+
+### Test 2: Sign → Speech
+
+1. Open `http://localhost:3000` in Chrome (recommended for WebRTC support).
+2. Enter a display name and click **Start Session**.
+3. Allow camera and microphone permissions when prompted.
+4. Make sure you're in **Sign** mode (hand icon active in the bottom controls).
+5. Sign something into the camera — start with a simple sign like waving "hello" or pointing to yourself (I/ME).
+6. When you lower your hands, the app will interpret after a short pause (~1 second).
+7. You should see:
+   - A translation overlay on the camera feed
+   - The translation appear in the transcript panel
+   - Audio playback of the English translation (if unmuted)
+
+### Test 3: Speech → Sign
+
+1. Switch to **Speak** mode (microphone icon in the bottom controls).
+2. Speak a short phrase like "How are you?" into your microphone.
+3. You should see:
+   - Your speech transcribed in the transcript panel
+   - ASL gloss notation displayed below the transcription (e.g., `HOW YOU?`)
+
+### Test 4: Multi-Party Room
+
+1. Open a second browser tab to `http://localhost:3000`.
+2. In the first tab, note the room code in the URL (`?room=XXXX`) or create a new room.
+3. In the second tab, join the same room code with a different display name.
+4. Sign or speak in one tab — the translation should appear in both tabs.
+
+### Test 5: Settings
+
+1. Open the settings panel (gear icon).
+2. Try changing:
+   - **Voice** — switch between Emma, Ava, James, Michael
+   - **Text size** — small / medium / large / xlarge
+   - **High contrast** — toggle dark mode
+   - **Show ASL gloss** — toggle gloss display for spoken input
+
+### Troubleshooting
+
+- **Camera not working**: Make sure no other app is using the camera. Try Chrome if using another browser.
+- **No translations**: Check that `GEMINI_API_KEY` is set correctly in `server/.env` and the health endpoint shows `gemini_configured: true`.
+- **No audio playback**: Make sure the mute button (speaker icon) is not active. If server TTS isn't configured, the app falls back to browser speech synthesis.
+- **WebSocket disconnects**: Check that the backend is running on port 8080 and CORS is configured (`ALLOWED_ORIGINS=http://localhost:3000` in `server/.env`).
+
 ## Architecture
 
 - Diagram source: `docs/architecture.svg`
